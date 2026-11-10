@@ -1,0 +1,10 @@
+# SITE_ADDRESS steht in der Datei .env.
+# ":80" = Test über die IP-Adresse. Mit einer Domain (z. B. "minimo3d.com, www.minimo3d.com")
+# holt Caddy automatisch ein HTTPS-Zertifikat.
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+	request_body {
+		max_size 60MB
+	}
+	reverse_proxy app:3000
+}
