@@ -16,6 +16,7 @@ import {
   type InfillId,
   type LayerId,
 } from '@/lib/pricing'
+import { COUNTRIES, EMPTY_CONTACT, type Contact } from '@/lib/contact'
 import { Viewer, type ViewerHandle } from './Viewer'
 
 type Material = {
@@ -51,6 +52,8 @@ type Props = {
   initialMaterial?: string
   /** Angemeldeter Kunde; null = Bestellung als Gast */
   customer?: { b2b: boolean; discountPercent: number; invoiceAllowed: boolean; invoiceDays: number; hasBilling: boolean } | null
+  /** Kontakt und Adressen aus dem Kundenkonto als Vorbelegung für den Bestellschritt */
+  contactDefaults?: Contact
   /** Gespeicherte Datei wieder öffnen (Nachbestellen aus dem Kundenkonto) */
   initial?: { token?: string; materialId?: string; layer?: string; infill?: string; quantity?: number; color?: string }
 }
@@ -69,7 +72,7 @@ const fits = (size: number[], cfg: CalcConfig) => {
   return a[0] <= b[0] && a[1] <= b[1] && a[2] <= b[2]
 }
 
-export function Calculator({ materials, config, checkoutEnabled, testMode, initialMaterial, customer = null, initial }: Props) {
+export function Calculator({ materials, config, checkoutEnabled, testMode, initialMaterial, customer = null, initial, contactDefaults }: Props) {
   const b2b = Boolean(customer?.b2b)
   const canInvoice = Boolean(b2b && customer?.invoiceAllowed)
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
@@ -90,6 +93,11 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
   const [delivery, setDelivery] = useState<DeliveryId>('versand')
   const [note, setNote] = useState('')
   const [accepted, setAccepted] = useState(false)
+  const [step, setStep] = useState<'config' | 'address'>('config')
+  const [contact, setContact] = useState<Contact>(contactDefaults || EMPTY_CONTACT)
+  const set = (key: keyof Contact) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setContact((c) => ({ ...c, [key]: e.target.value }))
+  const side = useRef<HTMLFormElement>(null)
   const [poNumber, setPoNumber] = useState('')
   const [costCentre, setCostCentre] = useState('')
   const [payment, setPayment] = useState<'stripe' | 'rechnung'>(canInvoice && customer?.hasBilling ? 'rechnung' : 'stripe')
@@ -198,6 +206,8 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
     }
   }, [initial?.token])
 
+  const invoice = canInvoice && payment === 'rechnung'
+
   /** Geschäftskunden sehen Nettopreise. */
   const show = (cents: number) => euro(b2b ? netCents(cents, config.vatPercent) : cents)
 
@@ -237,12 +247,18 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
     e.preventDefault()
     if (!analysis) return
     setError(null)
+    if (step === 'config') {
+      // erster Klick: zum Schritt mit Kontakt und Adresse
+      setStep('address')
+      requestAnimationFrame(() => side.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+      return
+    }
     setBusy('checkout')
     try {
       const res = await fetch('/rechner/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...selection(), note, accepted, poNumber, costCentre, payment: canInvoice ? payment : 'stripe' }),
+        body: JSON.stringify({ ...selection(), note, accepted, poNumber, costCentre, payment: canInvoice ? payment : 'stripe', contact }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json.url) throw new Error(json.error || 'Die Kasse konnte nicht geöffnet werden.')
@@ -254,6 +270,7 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
   }
 
   const reset = () => {
+    setStep('config')
     setAnalysis(null)
     setPositions(null)
     setError(null)
@@ -393,8 +410,130 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
       </div>
 
       {/* ---------- Ausführung und Preis ---------- */}
-      <form className="calc__side" onSubmit={checkout}>
-        <section className="panel" aria-labelledby="calc-config">
+      <form className="calc__side" onSubmit={checkout} ref={side}>
+        {step === 'address' && (
+          <section className="panel" aria-labelledby="calc-address">
+            <div className="panel__head">
+              <h2 className="h3" id="calc-address">
+                Ihre Angaben
+              </h2>
+              <button className="linkbtn" type="button" onClick={() => setStep('config')}>
+                ← Ausführung ändern
+              </button>
+            </div>
+            {invoice ? (
+              <>
+                <p>Rechnung und Lieferung gehen an die Adressen aus Ihrem Kundenkonto:</p>
+                <p className="address">
+                  {[contact.company, `${contact.firstName} ${contact.lastName}`, contact.street, `${contact.zip} ${contact.city}`].filter(Boolean).join('\n')}
+                </p>
+                <p className="small">
+                  <Link href="/konto/profil">Adressen im Kundenkonto ändern</Link>
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="form__row">
+                  <div className="field">
+                    <label htmlFor="co-first">Vorname</label>
+                    <input id="co-first" type="text" required autoComplete="given-name" value={contact.firstName} onChange={set('firstName')} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="co-last">Nachname</label>
+                    <input id="co-last" type="text" required autoComplete="family-name" value={contact.lastName} onChange={set('lastName')} />
+                  </div>
+                </div>
+                <div className="form__row">
+                  <div className="field">
+                    <label htmlFor="co-email">E-Mail</label>
+                    <input id="co-email" type="email" required autoComplete="email" value={contact.email} onChange={set('email')} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="co-phone">Telefon (optional)</label>
+                    <input id="co-phone" type="tel" autoComplete="tel" value={contact.phone} onChange={set('phone')} />
+                  </div>
+                </div>
+                <div className="form__row">
+                  <div className="field">
+                    <label htmlFor="co-company">Firma (optional)</label>
+                    <input id="co-company" type="text" autoComplete="organization" value={contact.company} onChange={set('company')} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="co-vat">Umsatzsteuer-ID (optional)</label>
+                    <input id="co-vat" type="text" placeholder="DE123456789" value={contact.vatId} onChange={set('vatId')} />
+                  </div>
+                </div>
+                <div className="field">
+                  <label htmlFor="co-street">Rechnungsadresse: Straße und Hausnummer</label>
+                  <input id="co-street" type="text" required autoComplete="address-line1" value={contact.street} onChange={set('street')} />
+                </div>
+                <div className="form__row">
+                  <div className="field">
+                    <label htmlFor="co-zip">PLZ</label>
+                    <input id="co-zip" type="text" required inputMode="numeric" autoComplete="postal-code" value={contact.zip} onChange={set('zip')} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="co-city">Ort</label>
+                    <input id="co-city" type="text" required autoComplete="address-level2" value={contact.city} onChange={set('city')} />
+                  </div>
+                </div>
+                <div className="field">
+                  <label htmlFor="co-country">Land</label>
+                  <select id="co-country" autoComplete="country" value={contact.country} onChange={set('country')}>
+                    {COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {delivery === 'versand' ? (
+                  <>
+                    <label className="option">
+                      <input
+                        type="checkbox"
+                        checked={contact.shippingSame}
+                        onChange={(e) => setContact((c) => ({ ...c, shippingSame: e.target.checked }))}
+                      />
+                      <span>Lieferung an die Rechnungsadresse</span>
+                    </label>
+                    {!contact.shippingSame && (
+                      <>
+                        <div className="field">
+                          <label htmlFor="co-sname">Lieferadresse: Empfänger</label>
+                          <input id="co-sname" type="text" value={contact.sName} onChange={set('sName')} />
+                        </div>
+                        <div className="field">
+                          <label htmlFor="co-sstreet">Straße und Hausnummer</label>
+                          <input id="co-sstreet" type="text" required value={contact.sStreet} onChange={set('sStreet')} />
+                        </div>
+                        <div className="form__row">
+                          <div className="field">
+                            <label htmlFor="co-szip">PLZ</label>
+                            <input id="co-szip" type="text" required inputMode="numeric" value={contact.sZip} onChange={set('sZip')} />
+                          </div>
+                          <div className="field">
+                            <label htmlFor="co-scity">Ort</label>
+                            <input id="co-scity" type="text" required value={contact.sCity} onChange={set('sCity')} />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    <p className="small muted">Wir versenden mit DHL innerhalb Deutschlands.</p>
+                  </>
+                ) : (
+                  <p className="small muted">Sie holen das Teil in Neuhausen auf den Fildern ab. Wir melden uns, sobald es bereitliegt.</p>
+                )}
+                {customer === null && (
+                  <p className="small muted">
+                    Schon Kunde? <Link href="/konto/anmelden?weiter=/preisrechner">Anmelden</Link>, dann sind Ihre Angaben beim nächsten Mal ausgefüllt.
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+        )}
+        <section className="panel" aria-labelledby="calc-config" hidden={step === 'address'}>
           <h2 className="h3" id="calc-config">
             {analysis ? 'Ausführung wählen' : '2. Ausführung wählen'}
           </h2>
@@ -682,38 +821,42 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
               </div>
 
               {checkoutEnabled || (canInvoice && customer?.hasBilling) ? (
-                <>
-                  {testMode && payment === 'stripe' && (
-                    <p className="form__msg form__msg--ok">Testmodus: Die Kasse arbeitet mit Testzahlungen. Es wird nichts abgebucht.</p>
-                  )}
-                  <label className="consent">
-                    <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} required />
-                    <span>
-                      Ich akzeptiere die <Link href="/agb">AGB</Link> und habe die <Link href="/datenschutz">Datenschutzerklärung</Link>{' '}
-                      gelesen. Das Teil wird nach meinen Vorgaben gefertigt, deshalb besteht kein Widerrufsrecht.
-                      Schichtlinien, Stützspuren und leichte Maßabweichungen sind kein Mangel.
-                    </span>
-                  </label>
-                  <button className="btn btn--primary" type="submit" disabled={busy === 'checkout'}>
-                    {payment === 'rechnung' && canInvoice
-                      ? busy === 'checkout'
-                        ? 'Bestellung wird gesendet …'
-                        : 'Zahlungspflichtig bestellen'
-                      : busy === 'checkout'
-                        ? 'Kasse wird geöffnet …'
-                        : 'Weiter zur Zahlung'}
-                  </button>
-                  <p className="small muted">
-                    {payment === 'rechnung' && canInvoice
-                      ? 'Rechnung und Lieferung gehen an die Adressen aus Ihrem Kundenkonto.'
-                      : 'Sie zahlen sicher über Stripe. Dort geben Sie auch Ihre Adresse ein.'}
-                  </p>
-                  {customer === null && (
+                step === 'config' ? (
+                  <>
+                    <button className="btn btn--primary" type="submit">
+                      Weiter: Adresse und Zahlung
+                    </button>
                     <p className="small muted">
-                      Mit einem <Link href="/konto/anmelden?weiter=/preisrechner">Kundenkonto</Link> bleiben Dateien und Bestellungen gespeichert.
+                      {customer ? 'Im nächsten Schritt prüfen Sie Ihre Adresse.' : 'Im nächsten Schritt geben Sie Ihre Adresse an. Ein Kundenkonto brauchen Sie nicht.'}
                     </p>
-                  )}
-                </>
+                  </>
+                ) : (
+                  <>
+                    {testMode && !invoice && (
+                      <p className="form__msg form__msg--ok">Testmodus: Die Kasse arbeitet mit Testzahlungen. Es wird nichts abgebucht.</p>
+                    )}
+                    <label className="consent">
+                      <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} required />
+                      <span>
+                        Ich akzeptiere die <Link href="/agb">AGB</Link> und habe die <Link href="/datenschutz">Datenschutzerklärung</Link>{' '}
+                        gelesen. Das Teil wird nach meinen Vorgaben gefertigt, deshalb besteht kein Widerrufsrecht.
+                        Schichtlinien, Stützspuren und leichte Maßabweichungen sind kein Mangel.
+                      </span>
+                    </label>
+                    <button className="btn btn--primary" type="submit" disabled={busy === 'checkout'}>
+                      {invoice
+                        ? busy === 'checkout'
+                          ? 'Bestellung wird gesendet …'
+                          : 'Zahlungspflichtig bestellen'
+                        : busy === 'checkout'
+                          ? 'Kasse wird geöffnet …'
+                          : 'Weiter zur Zahlung'}
+                    </button>
+                    {!invoice && (
+                      <p className="small muted">Sie zahlen sicher über Stripe. Ihre Angaben sind dort schon eingetragen.</p>
+                    )}
+                  </>
+                )
               ) : (
                 <>
                   <p className="small muted">

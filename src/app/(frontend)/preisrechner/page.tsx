@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { PageHead } from '@/components/Blocks'
 import { Calculator } from '@/components/calculator/Calculator'
 import { getCalcSetup } from '@/lib/calc-server'
+import { contactFromCustomer } from '@/lib/contact'
 import { discountOf, getCustomer, hasBilling, isB2B } from '@/lib/customer'
 import { stripeEnabled, stripeTestMode } from '@/lib/stripe'
 
@@ -52,6 +53,7 @@ export default async function CalculatorPage({ searchParams }: Props) {
                   }
                 : null
             }
+            contactDefaults={customer ? contactFromCustomer(customer) : undefined}
             initial={{
               token: params.datei,
               materialId: params.m,

@@ -2048,3 +2048,16 @@ a.tile:hover {
     font-weight: 700;
   }
 }
+
+/* Bestellschritt: Adresse */
+.panel[hidden] {
+  display: none;
+}
+.address {
+  white-space: pre-line;
+  font-weight: 600;
+  color: var(--ink);
+}
+.calc__side {
+  scroll-margin-top: 96px;
+}

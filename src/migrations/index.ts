@@ -8,6 +8,7 @@ import * as migration_20261111_201000_social_links from './20261111_201000_socia
 import * as migration_20261111_202000_legal_texts from './20261111_202000_legal_texts';
 import * as migration_20261111_203820_customers from './20261111_203820_customers';
 import * as migration_20261111_204500_legal_accounts from './20261111_204500_legal_accounts';
+import * as migration_20261111_212500_legal_checkout from './20261111_212500_legal_checkout';
 
 export const migrations = [
   {
@@ -59,5 +60,10 @@ export const migrations = [
     up: migration_20261111_204500_legal_accounts.up,
     down: migration_20261111_204500_legal_accounts.down,
     name: '20261111_204500_legal_accounts',
+  },
+  {
+    up: migration_20261111_212500_legal_checkout.up,
+    down: migration_20261111_212500_legal_checkout.down,
+    name: '20261111_212500_legal_checkout',
   },
 ];

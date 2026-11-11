@@ -5,6 +5,7 @@ import { getPayload } from 'payload'
 
 import { resolveSelection } from '@/lib/calc-selection'
 import { findQuote, mayUseQuote, siteOrigin } from '@/lib/calc-server'
+import { billingText, countryName, fullName, parseContact, shippingOf, shippingText, type Contact } from '@/lib/contact'
 import { customerFromRequest, customerName, formatAddress, hasBilling, isB2B } from '@/lib/customer'
 import { sendOrderMails } from '@/lib/mail'
 import { getStripe } from '@/lib/stripe'
@@ -39,6 +40,14 @@ export async function POST(req: Request) {
   const stripe = onInvoice ? null : getStripe()
   if (!onInvoice && !stripe) return bad('Die Online-Zahlung ist noch nicht eingerichtet. Bitte senden Sie uns eine Anfrage.', 503)
 
+  // Kontakt und Adressen aus dem Bestellschritt (bei Kauf auf Rechnung gelten die Adressen aus dem Kundenkonto)
+  let contact: Contact | null = null
+  if (!onInvoice) {
+    const parsed = parseContact(body.contact, sel.delivery === 'versand')
+    if ('error' in parsed) return bad(parsed.error)
+    contact = parsed
+  }
+
   const { price } = sel
   const now = new Date()
   const stamp = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
@@ -66,14 +75,18 @@ export async function POST(req: Request) {
       paymentMethod: onInvoice ? 'rechnung' : 'stripe',
       total: price.totalCents / 100,
       customer: customer?.id,
-      customerName: customer ? [customer.company, customerName(customer)].filter(Boolean).join(', ') : undefined,
-      customerEmail: customer?.email,
-      customerPhone: customer?.phone || undefined,
+      customerName: contact
+        ? [contact.company, fullName(contact)].filter(Boolean).join(', ')
+        : customer
+          ? [customer.company, customerName(customer)].filter(Boolean).join(', ')
+          : undefined,
+      customerEmail: contact?.email || customer?.email,
+      customerPhone: contact?.phone || customer?.phone || undefined,
       address: onInvoice
         ? [`Rechnung:\n${formatAddress(customer!.company || customerName(customer!), customer!.billing)}`, shippingAddress ? `Lieferung:\n${shippingAddress}` : '']
             .filter(Boolean)
             .join('\n\n')
-        : undefined,
+        : [`Rechnung:\n${billingText(contact!)}`, sel.delivery === 'versand' ? `Lieferung:\n${shippingText(contact!)}` : ''].filter(Boolean).join('\n\n'),
       fileName: quote.fileName,
       file: typeof quote.file === 'object' ? quote.file?.id : quote.file,
       materialName: sel.material.name,
@@ -95,11 +108,26 @@ export async function POST(req: Request) {
         infillId: sel.infill.id,
         price,
         metrics: quote.metrics,
-        vatId: b2b ? customer?.vatId : undefined,
+        vatId: contact?.vatId || (b2b ? customer?.vatId : undefined),
+        contact: contact || undefined,
         invoiceDays: onInvoice ? (customer!.invoiceDays ?? 14) : undefined,
       },
     } as any,
   })
+
+  // Erste Adresse eines Kundenkontos merken, damit sie beim nächsten Mal schon dasteht
+  if (customer && contact && !hasBilling(customer))
+    await payload
+      .update({
+        collection: 'customers',
+        id: customer.id,
+        overrideAccess: true,
+        data: {
+          billing: { street: contact.street, zip: contact.zip, city: contact.city, country: countryName(contact.country) },
+          ...(customer.phone ? {} : { phone: contact.phone }),
+        } as any,
+      })
+      .catch(() => null)
 
   // ---- Kauf auf Rechnung: Bestellung ist damit angenommen ----
   if (onInvoice) {
@@ -130,6 +158,25 @@ export async function POST(req: Request) {
   const reference = [poNumber ? `Ihre Referenz ${poNumber}` : '', costCentre ? `Kostenstelle ${costCentre}` : ''].filter(Boolean).join(', ')
 
   try {
+    // Kunde bei Stripe mit den Angaben aus dem Bestellschritt anlegen: Die Bezahlseite ist damit vorausgefüllt
+    const c = contact!
+    const ship = shippingOf(c)
+    const stripeCustomer = await stripe!.customers.create({
+      email: c.email,
+      name: c.company || fullName(c),
+      phone: c.phone || undefined,
+      address: { line1: c.street, postal_code: c.zip, city: c.city, country: c.country },
+      ...(sel.delivery === 'versand'
+        ? { shipping: { name: ship.name, phone: c.phone || undefined, address: { line1: ship.street, postal_code: ship.zip, city: ship.city, country: 'DE' } } }
+        : {}),
+      preferred_locales: ['de'],
+      metadata: { orderNumber, contactPerson: fullName(c), ...(c.vatId ? { vatId: c.vatId } : {}), ...(customer ? { accountId: String(customer.id) } : {}) },
+    })
+    if (c.vatId)
+      await stripe!.customers
+        .createTaxId(stripeCustomer.id, { type: c.vatId.startsWith('CH') ? 'ch_vat' : 'eu_vat', value: c.vatId })
+        .catch(() => null) // eine von Stripe nicht erkannte Nummer darf die Zahlung nicht verhindern
+
     const session = await stripe!.checkout.sessions.create({
       mode: 'payment',
       locale: 'de',
@@ -155,8 +202,8 @@ export async function POST(req: Request) {
       billing_address_collection: 'required',
       phone_number_collection: { enabled: true },
       allow_promotion_codes: true,
-      customer_creation: 'always',
-      ...(customer ? { customer_email: customer.email } : {}),
+      customer: stripeCustomer.id,
+      customer_update: { address: 'auto', name: 'auto', shipping: 'auto' },
       client_reference_id: orderNumber,
       metadata: { orderId: String(order.id), orderNumber, ...(poNumber ? { poNumber } : {}), ...(costCentre ? { costCentre } : {}) },
       payment_intent_data: {
