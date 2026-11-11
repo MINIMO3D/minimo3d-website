@@ -27,7 +27,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Hochgeladene Bilder und Anfrage-Dateien liegen in Volumes (siehe compose.yml).
-RUN mkdir -p media inquiry-files && chown -R nextjs:nodejs media inquiry-files
+RUN mkdir -p media inquiry-files quote-files && chown -R nextjs:nodejs media inquiry-files quote-files
 
 USER nextjs
 EXPOSE 3000

@@ -40,8 +40,17 @@ npx payload migrate:create kurzer-name
 npx payload generate:types
 ```
 
-## Noch offen (Phase 2)
+## Preisrechner und Bestellung
 
-- Preisrechner mit Festpreis und Stripe-Checkout
-- E-Mail-Benachrichtigung bei neuen Anfragen (SMTP)
+- Seite `/preisrechner`: Upload (STL, STP/STEP, OBJ, 3MF), 3D-Ansicht, Fertigungsanalyse mit PDF, Sofortpreis, Bestellung.
+- Preise, Rabatte, Versand und Bauraum stehen im Admin-Bereich unter Preisrechner › Preise und Einstellungen.
+- Je Material: Preis je kg, Dichte, Zeit- und Preisfaktor und Farben unter Inhalte › Materialien › Preisrechner.
+- Bestellungen und hochgeladene Dateien stehen unter Preisrechner › Bestellungen.
+- Stripe: `./scripts/set-stripe-key.sh` trägt den geheimen Schlüssel ein. Ohne Schlüssel zeigt der Rechner den Preis, die Bestellung läuft dann als Anfrage.
+- Optional für Stripe-Webhooks: `STRIPE_WEBHOOK_SECRET` in `.env`, Ziel `https://DOMAIN/rechner/stripe-webhook`, Ereignis `checkout.session.completed`.
+
+## Noch offen
+
+- E-Mail-Benachrichtigung bei neuen Anfragen und Bestellungen (SMTP)
 - Newsletter
+- Versand ins EU-Ausland im Preisrechner

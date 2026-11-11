@@ -1,0 +1,618 @@
+'use client'
+
+import Link from 'next/link'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+import {
+  calculatePrice,
+  clampQuantity,
+  euro,
+  formatHours,
+  INFILLS,
+  LAYERS,
+  type CalcConfig,
+  type DeliveryId,
+  type InfillId,
+  type LayerId,
+} from '@/lib/pricing'
+import { Viewer, type ViewerHandle } from './Viewer'
+
+type Material = {
+  id: number | string
+  name: string
+  slug: string
+  family: string
+  summary: string
+  pricePerKg: number
+  density: number
+  timeFactor: number
+  priceFactor: number
+  colors: { name: string; hex?: string }[]
+}
+
+type Check = { id: string; title: string; status: 'ok' | 'warn' | 'fail' | 'info'; value: string; text: string }
+
+type Metrics = {
+  triangles: number
+  size: [number, number, number]
+  volumeCm3: number
+  areaCm2: number
+  supportCm3: number
+}
+
+type Analysis = { token: string; fileName: string; metrics: Metrics; checks: Check[] }
+
+type Props = {
+  materials: Material[]
+  config: CalcConfig
+  checkoutEnabled: boolean
+  testMode: boolean
+  initialMaterial?: string
+}
+
+const ACCEPT = '.stl,.stp,.step,.obj,.3mf'
+const MAX_SIZE = 50 * 1024 * 1024
+const DEFAULT_COLOR = '#8fa3bf'
+const STATUS_LABEL = { ok: 'In Ordnung', info: 'Hinweis', warn: 'Prüfen', fail: 'Kritisch' } as const
+const QUANTITY_PRESETS = [1, 5, 10, 25]
+
+const num = (v: number, d = 1) => v.toLocaleString('de-DE', { minimumFractionDigits: d, maximumFractionDigits: d })
+
+const fits = (size: number[], cfg: CalcConfig) => {
+  const a = [...size].sort((p, q) => q - p)
+  const b = [cfg.buildX, cfg.buildY, cfg.buildZ].sort((p, q) => q - p)
+  return a[0] <= b[0] && a[1] <= b[1] && a[2] <= b[2]
+}
+
+export function Calculator({ materials, config, checkoutEnabled, testMode, initialMaterial }: Props) {
+  const [analysis, setAnalysis] = useState<Analysis | null>(null)
+  const [positions, setPositions] = useState<Float32Array | null>(null)
+  const [busy, setBusy] = useState<'upload' | 'pdf' | 'checkout' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+
+  const [materialId, setMaterialId] = useState<string>(() => {
+    const wanted = materials.find((m) => m.slug === initialMaterial)
+    return String((wanted || materials[0])?.id ?? '')
+  })
+  const [color, setColor] = useState('')
+  const [layer, setLayer] = useState<LayerId>('standard')
+  const [infill, setInfill] = useState<InfillId>('standard')
+  const [quantity, setQuantity] = useState(1)
+  const [express, setExpress] = useState(false)
+  const [delivery, setDelivery] = useState<DeliveryId>('versand')
+  const [note, setNote] = useState('')
+  const [accepted, setAccepted] = useState(false)
+
+  const viewer = useRef<ViewerHandle>(null)
+  const input = useRef<HTMLInputElement>(null)
+
+  const material = materials.find((m) => String(m.id) === materialId) || materials[0]
+  const families = useMemo(() => [...new Set(materials.map((m) => m.family))], [materials])
+
+  // Farbe passend zum Material halten
+  useEffect(() => {
+    if (!material) return
+    if (material.colors.length) {
+      if (!material.colors.some((c) => c.name === color)) setColor(material.colors[0].name)
+    } else if (materials.some((m) => m.colors.some((c) => c.name === color))) setColor('')
+  }, [material, color, materials])
+
+  const colorHex = material?.colors.find((c) => c.name === color)?.hex || DEFAULT_COLOR
+
+  const priceFor = useCallback(
+    (qty: number) =>
+      analysis && material
+        ? calculatePrice(
+            {
+              geometry: {
+                volumeCm3: analysis.metrics.volumeCm3,
+                areaCm2: analysis.metrics.areaCm2,
+                supportCm3: analysis.metrics.supportCm3,
+                heightMm: analysis.metrics.size[2],
+              },
+              material,
+              layer,
+              infill,
+              quantity: qty,
+              express,
+              delivery,
+            },
+            config,
+          )
+        : null,
+    [analysis, material, layer, infill, express, delivery, config],
+  )
+  const price = priceFor(quantity)
+  const fitsBuild = analysis ? fits(analysis.metrics.size, config) : true
+  const hasFail = analysis?.checks.some((c) => c.status === 'fail') ?? false
+
+  const upload = async (file: File | undefined | null) => {
+    if (!file) return
+    setError(null)
+    if (!/\.(stl|stp|step|obj|3mf)$/i.test(file.name)) {
+      setError('Dieses Dateiformat können wir hier nicht lesen. Möglich sind STL, STEP (STP), OBJ und 3MF.')
+      return
+    }
+    if (file.size > MAX_SIZE) {
+      setError('Die Datei ist größer als 50 MB. Bitte senden Sie sie uns als Anfrage.')
+      return
+    }
+    setBusy('upload')
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch('/rechner/analyse', { method: 'POST', body })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Die Datei konnte nicht ausgewertet werden.')
+      const meshRes = await fetch(`/rechner/mesh/${json.token}`)
+      if (!meshRes.ok) throw new Error('Die 3D-Ansicht konnte nicht geladen werden.')
+      const buffer = await meshRes.arrayBuffer()
+      setPositions(new Float32Array(buffer))
+      setAnalysis(json as Analysis)
+      setAccepted(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Die Datei konnte nicht ausgewertet werden.')
+    } finally {
+      setBusy(null)
+      if (input.current) input.current.value = ''
+    }
+  }
+
+  const selection = () => ({ token: analysis?.token, materialId, color, layer, infill, quantity, express, delivery })
+
+  const downloadPdf = async () => {
+    if (!analysis) return
+    setError(null)
+    setBusy('pdf')
+    try {
+      const res = await fetch('/rechner/dfm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...selection(), snapshot: viewer.current?.snapshot() }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.error || 'Das PDF konnte nicht erstellt werden.')
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `DFM-Analyse_${analysis.fileName.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]+/g, '_') || 'Bauteil'}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Das PDF konnte nicht erstellt werden.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const checkout = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!analysis) return
+    setError(null)
+    setBusy('checkout')
+    try {
+      const res = await fetch('/rechner/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...selection(), note, accepted }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.url) throw new Error(json.error || 'Die Kasse konnte nicht geöffnet werden.')
+      window.location.href = json.url
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Die Kasse konnte nicht geöffnet werden.')
+      setBusy(null)
+    }
+  }
+
+  const reset = () => {
+    setAnalysis(null)
+    setPositions(null)
+    setError(null)
+  }
+
+  if (!materials.length)
+    return (
+      <div className="calc__empty">
+        <p>Der Preisrechner ist gerade nicht verfügbar. Senden Sie uns Ihr Bauteil bitte als Anfrage.</p>
+        <Link className="btn btn--primary" href="/kontakt#anfrage">
+          Bauteil anfragen
+        </Link>
+      </div>
+    )
+
+  const m = analysis?.metrics
+
+  return (
+    <div className="calc">
+      <div className="calc__main">
+        {/* ---------- Datei und 3D-Ansicht ---------- */}
+        <section className="panel" aria-labelledby="calc-file">
+          <div className="panel__head">
+            <h2 className="h3" id="calc-file">
+              {analysis ? analysis.fileName : '1. Datei hochladen'}
+            </h2>
+            {analysis && (
+              <div className="panel__actions">
+                <button className="linkbtn" type="button" onClick={() => viewer.current?.resetView()}>
+                  Ansicht zurücksetzen
+                </button>
+                <button className="linkbtn" type="button" onClick={reset}>
+                  Andere Datei
+                </button>
+              </div>
+            )}
+          </div>
+
+          {!analysis && (
+            <label
+              className={`dropzone${dragging ? ' dropzone--over' : ''}${busy === 'upload' ? ' dropzone--busy' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragging(true)
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragging(false)
+                void upload(e.dataTransfer.files?.[0])
+              }}
+            >
+              <input
+                ref={input}
+                className="dropzone__input"
+                type="file"
+                accept={ACCEPT}
+                disabled={busy === 'upload'}
+                onChange={(e) => void upload(e.target.files?.[0])}
+              />
+              <span className="dropzone__title">
+                {busy === 'upload' ? 'Datei wird geprüft …' : 'Datei hierher ziehen oder auswählen'}
+              </span>
+              <span className="dropzone__hint">STL · STP · STEP · OBJ · 3MF, bis 50 MB</span>
+              <span className="dropzone__note">
+                Die Datei wird zur Berechnung auf unseren Server in Deutschland geladen und nach 7 Tagen gelöscht, wenn
+                Sie nicht bestellen.
+              </span>
+            </label>
+          )}
+
+          {analysis && positions && m && (
+            <>
+              <div className="viewer">
+                <Viewer ref={viewer} positions={positions} color={colorHex} build={{ x: config.buildX, y: config.buildY }} />
+              </div>
+              <dl className="facts">
+                <div>
+                  <dt>Abmessungen</dt>
+                  <dd>
+                    {num(m.size[0])} × {num(m.size[1])} × {num(m.size[2])} mm
+                  </dd>
+                </div>
+                <div>
+                  <dt>Volumen</dt>
+                  <dd>{num(m.volumeCm3, 2)} cm³</dd>
+                </div>
+                <div>
+                  <dt>Oberfläche</dt>
+                  <dd>{num(m.areaCm2)} cm²</dd>
+                </div>
+                <div>
+                  <dt>Dreiecke</dt>
+                  <dd>{m.triangles.toLocaleString('de-DE')}</dd>
+                </div>
+              </dl>
+            </>
+          )}
+        </section>
+
+        {error && (
+          <p className="form__msg form__msg--err" role="alert">
+            {error}
+          </p>
+        )}
+
+        {/* ---------- DFM ---------- */}
+        {analysis && (
+          <section className="panel" aria-labelledby="calc-dfm">
+            <div className="panel__head">
+              <h2 className="h3" id="calc-dfm">
+                Fertigungsanalyse (DFM)
+              </h2>
+              <button className="btn btn--ghost btn--small" type="button" onClick={downloadPdf} disabled={busy === 'pdf'}>
+                {busy === 'pdf' ? 'PDF wird erstellt …' : 'Als PDF herunterladen'}
+              </button>
+            </div>
+            <ul className="checks-list">
+              {analysis.checks.map((c) => (
+                <li key={c.id} className={`check check--${c.status}`}>
+                  <span className="check__status">{STATUS_LABEL[c.status]}</span>
+                  <div className="check__body">
+                    <p className="check__title">
+                      {c.title} <span className="check__value">{c.value}</span>
+                    </p>
+                    <p className="check__text">{c.text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="small muted">
+              Automatische Vorprüfung in der gelieferten Lage des Modells. Vor dem Druck prüfen wir jede Datei von Hand
+              und wählen die beste Drucklage.
+            </p>
+          </section>
+        )}
+      </div>
+
+      {/* ---------- Ausführung und Preis ---------- */}
+      <form className="calc__side" onSubmit={checkout}>
+        <section className="panel" aria-labelledby="calc-config">
+          <h2 className="h3" id="calc-config">
+            {analysis ? 'Ausführung wählen' : '2. Ausführung wählen'}
+          </h2>
+
+          <div className="field">
+            <label htmlFor="calc-material">Material</label>
+            <select id="calc-material" value={materialId} onChange={(e) => setMaterialId(e.target.value)}>
+              {families.map((f) => (
+                <optgroup key={f} label={f}>
+                  {materials
+                    .filter((x) => x.family === f)
+                    .map((x) => (
+                      <option key={x.id} value={String(x.id)}>
+                        {x.name}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+            {material && (
+              <p className="small muted">
+                {material.summary} <Link href={`/materialien/${material.slug}`}>Mehr zum Material</Link>
+              </p>
+            )}
+          </div>
+
+          {material && material.colors.length > 0 ? (
+            <fieldset className="field">
+              <legend>Farbe: {color}</legend>
+              <div className="swatches">
+                {material.colors.map((c) => (
+                  <label key={c.name} className="swatch" title={c.name}>
+                    <input type="radio" name="color" value={c.name} checked={color === c.name} onChange={() => setColor(c.name)} />
+                    <span className="swatch__dot" style={{ background: c.hex || DEFAULT_COLOR }} />
+                    <span className="swatch__name">{c.name}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ) : (
+            <div className="field">
+              <label htmlFor="calc-color">Farbwunsch (optional)</label>
+              <input
+                id="calc-color"
+                type="text"
+                maxLength={60}
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                placeholder="z. B. Schwarz"
+              />
+              <p className="small muted">Wir bestätigen die Farbe mit der Auftragsbestätigung.</p>
+            </div>
+          )}
+
+          <fieldset className="field">
+            <legend>Schichthöhe</legend>
+            <div className="choices">
+              {LAYERS.map((l) => (
+                <label key={l.id} className="choice">
+                  <input type="radio" name="layer" value={l.id} checked={layer === l.id} onChange={() => setLayer(l.id)} />
+                  <span className="choice__box">
+                    <span className="choice__title">{l.label}</span>
+                    <span className="choice__value">{num(l.mm)} mm</span>
+                    <span className="choice__hint">{l.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset className="field">
+            <legend>Füllung</legend>
+            <div className="choices">
+              {INFILLS.map((i) => (
+                <label key={i.id} className="choice">
+                  <input type="radio" name="infill" value={i.id} checked={infill === i.id} onChange={() => setInfill(i.id)} />
+                  <span className="choice__box">
+                    <span className="choice__title">{i.label}</span>
+                    <span className="choice__value">{i.range}</span>
+                    <span className="choice__hint">{i.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="field">
+            <label htmlFor="calc-qty">Stückzahl</label>
+            <div className="qty">
+              <button type="button" className="qty__btn" aria-label="Eine weniger" onClick={() => setQuantity((q) => clampQuantity(q - 1))}>
+                −
+              </button>
+              <input
+                id="calc-qty"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={500}
+                value={quantity}
+                onChange={(e) => setQuantity(clampQuantity(Number(e.target.value)))}
+              />
+              <button type="button" className="qty__btn" aria-label="Eine mehr" onClick={() => setQuantity((q) => clampQuantity(q + 1))}>
+                +
+              </button>
+              <div className="qty__presets">
+                {QUANTITY_PRESETS.map((q) => (
+                  <button key={q} type="button" className={`chip${quantity === q ? ' chip--on' : ''}`} onClick={() => setQuantity(q)}>
+                    {q}×
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <fieldset className="field">
+            <legend>Lieferung</legend>
+            <label className="option">
+              <input type="radio" name="delivery" checked={delivery === 'versand'} onChange={() => setDelivery('versand')} />
+              <span>
+                DHL-Versand innerhalb Deutschlands, {euro(Math.round(config.shippingGross * 100))}, ab{' '}
+                {euro(Math.round(config.freeShippingFromGross * 100))} kostenlos
+              </span>
+            </label>
+            <label className="option">
+              <input type="radio" name="delivery" checked={delivery === 'abholung'} onChange={() => setDelivery('abholung')} />
+              <span>Abholung in Neuhausen auf den Fildern, kostenlos</span>
+            </label>
+            <label className="option">
+              <input type="checkbox" checked={express} onChange={(e) => setExpress(e.target.checked)} />
+              <span>
+                Express: {num(config.expressPercent, 0)} % Aufschlag, mindestens {euro(Math.round(config.expressMinGross * 100))}
+              </span>
+            </label>
+          </fieldset>
+        </section>
+
+        <section className="panel panel--price" aria-labelledby="calc-price" aria-live="polite">
+          <h2 className="h3" id="calc-price">
+            {analysis ? 'Ihr Preis' : '3. Preis sehen und bestellen'}
+          </h2>
+
+          {!analysis && <p className="muted">Laden Sie eine Datei hoch. Der Preis erscheint sofort.</p>}
+
+          {analysis && price && !fitsBuild && (
+            <>
+              <p>
+                Das Teil ist größer als unser Bauraum von {config.buildX} × {config.buildY} × {config.buildZ} mm. Wir
+                fertigen es geteilt und gefügt und nennen Ihnen den Preis im Angebot.
+              </p>
+              <Link className="btn btn--primary" href="/kontakt#anfrage">
+                Bauteil anfragen
+              </Link>
+            </>
+          )}
+
+          {analysis && price && fitsBuild && (
+            <>
+              <p className="total">
+                <span className="total__amount">{euro(price.totalCents)}</span>
+                <span className="total__note">inkl. 19 % MwSt.{price.shippingCents ? ' und Versand' : ''}</span>
+              </p>
+              <dl className="sum">
+                <div>
+                  <dt>
+                    {quantity} × {euro(price.unitCents)}
+                    {price.discountPercent ? ` (${num(price.discountPercent, 0)} % Mengenrabatt enthalten)` : ''}
+                  </dt>
+                  <dd>{euro(price.partsCents)}</dd>
+                </div>
+                <div>
+                  <dt>Auftragspauschale</dt>
+                  <dd>{euro(price.feeCents)}</dd>
+                </div>
+                {price.expressCents > 0 && (
+                  <div>
+                    <dt>Express</dt>
+                    <dd>{euro(price.expressCents)}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt>{delivery === 'versand' ? 'DHL-Versand' : 'Abholung'}</dt>
+                  <dd>{price.shippingCents ? euro(price.shippingCents) : 'kostenlos'}</dd>
+                </div>
+                <div className="sum__muted">
+                  <dt>Enthaltene MwSt.</dt>
+                  <dd>{euro(price.vatCents)}</dd>
+                </div>
+              </dl>
+              <dl className="facts facts--tight">
+                <div>
+                  <dt>Lieferzeit</dt>
+                  <dd>{price.leadTime}</dd>
+                </div>
+                <div>
+                  <dt>Gewicht je Stück</dt>
+                  <dd>ca. {num(price.gramsPerPart, 0)} g</dd>
+                </div>
+                <div>
+                  <dt>Druckzeit je Stück</dt>
+                  <dd>ca. {formatHours(price.hoursPerPart)}</dd>
+                </div>
+              </dl>
+
+              <div className="ladder" aria-label="Stückpreis nach Menge">
+                {QUANTITY_PRESETS.map((q) => {
+                  const p = priceFor(q)
+                  return p ? (
+                    <button key={q} type="button" className={`ladder__cell${quantity === q ? ' ladder__cell--on' : ''}`} onClick={() => setQuantity(q)}>
+                      <span>{q} Stück</span>
+                      <strong>{euro(p.unitCents)}</strong>
+                    </button>
+                  ) : null
+                })}
+              </div>
+
+              {hasFail && (
+                <p className="form__msg form__msg--err">
+                  Die Fertigungsanalyse zeigt einen kritischen Punkt. Sie können trotzdem bestellen. Wir melden uns vor
+                  dem Druck, falls das Teil so nicht herstellbar ist.
+                </p>
+              )}
+
+              <div className="field">
+                <label htmlFor="calc-note">Hinweis zum Auftrag (optional)</label>
+                <textarea id="calc-note" rows={2} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} />
+              </div>
+
+              {checkoutEnabled ? (
+                <>
+                  {testMode && (
+                    <p className="form__msg form__msg--ok">Testmodus: Die Kasse arbeitet mit Testzahlungen. Es wird nichts abgebucht.</p>
+                  )}
+                  <label className="consent">
+                    <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} required />
+                    <span>
+                      Ich akzeptiere die <Link href="/agb">AGB</Link> und habe die <Link href="/datenschutz">Datenschutzerklärung</Link>{' '}
+                      gelesen. Das Teil wird nach meinen Vorgaben gefertigt, deshalb besteht kein Widerrufsrecht.
+                      Schichtlinien, Stützspuren und leichte Maßabweichungen sind kein Mangel.
+                    </span>
+                  </label>
+                  <button className="btn btn--primary" type="submit" disabled={busy === 'checkout'}>
+                    {busy === 'checkout' ? 'Kasse wird geöffnet …' : 'Weiter zur Zahlung'}
+                  </button>
+                  <p className="small muted">Sie zahlen sicher über Stripe. Dort geben Sie auch Ihre Adresse ein.</p>
+                </>
+              ) : (
+                <>
+                  <p className="small muted">
+                    Die Online-Zahlung wird gerade eingerichtet. Senden Sie uns Ihr Bauteil bis dahin bitte als Anfrage,
+                    der Preis gilt.
+                  </p>
+                  <Link className="btn btn--primary" href="/kontakt#anfrage">
+                    Bauteil anfragen
+                  </Link>
+                </>
+              )}
+            </>
+          )}
+        </section>
+      </form>
+    </div>
+  )
+}

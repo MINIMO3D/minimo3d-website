@@ -28,7 +28,7 @@ export default async function HomePage() {
             <h1 className="h1">{home.headline}</h1>
             {home.text && <p className="lead">{home.text}</p>}
             <div className="btns">
-              <Link className="btn btn--primary" href="/kontakt#anfrage">
+              <Link className="btn btn--primary" href="/preisrechner">
                 {home.heroButtonLabel || 'Sofortangebot'}
               </Link>
               <Link className="btn btn--onvideo" href="/materialien">

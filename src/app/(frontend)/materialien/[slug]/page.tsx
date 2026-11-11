@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
 import { CtaBand, Figure, MaterialRow, PageHead, SpecTable } from '@/components/Blocks'
@@ -111,6 +112,19 @@ export default async function MaterialPage({ params }: Props) {
             {related.map((x) => (
               <MaterialRow key={x.id} m={{ ...x, keywords: x.summary }} />
             ))}
+          </div>
+        </section>
+      )}
+
+      {m.calc?.enabled && (
+        <section className="wrap" style={{ paddingBottom: 'var(--section)' }}>
+          <div className="note" style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px 32px' }}>
+            <p>
+              <strong>Preis für {m.name} sofort berechnen:</strong> Datei hochladen, Ausführung wählen, direkt bestellen.
+            </p>
+            <Link className="btn btn--primary" href={`/preisrechner?material=${m.slug}`}>
+              Preis berechnen
+            </Link>
           </div>
         </section>
       )}

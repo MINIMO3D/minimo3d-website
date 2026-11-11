@@ -74,6 +74,9 @@ export interface Config {
     media: Media;
     inquiries: Inquiry;
     'inquiry-files': InquiryFile;
+    orders: Order;
+    quotes: Quote;
+    'quote-files': QuoteFile;
     users: User;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -89,6 +92,9 @@ export interface Config {
     media: MediaSelect<false> | MediaSelect<true>;
     inquiries: InquiriesSelect<false> | InquiriesSelect<true>;
     'inquiry-files': InquiryFilesSelect<false> | InquiryFilesSelect<true>;
+    orders: OrdersSelect<false> | OrdersSelect<true>;
+    quotes: QuotesSelect<false> | QuotesSelect<true>;
+    'quote-files': QuoteFilesSelect<false> | QuoteFilesSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -101,10 +107,12 @@ export interface Config {
   fallbackLocale: null;
   globals: {
     homepage: Homepage;
+    calculator: Calculator;
     'site-settings': SiteSetting;
   };
   globalsSelect: {
     homepage: HomepageSelect<false> | HomepageSelect<true>;
+    calculator: CalculatorSelect<false> | CalculatorSelect<true>;
     'site-settings': SiteSettingsSelect<false> | SiteSettingsSelect<true>;
   };
   locale: null;
@@ -252,6 +260,32 @@ export interface Material {
     'PLA' | 'PETG' | 'ABS / ASA' | 'PC' | 'PP' | 'Nylon (PA)' | 'Faserverstärkt' | 'TPU (flexibel)' | 'Harz (SLA)';
   category: 'Standard' | 'Technisch' | 'Faserverstärkt' | 'Flexibel';
   process: 'FDM' | 'SLA';
+  calc?: {
+    enabled?: boolean | null;
+    pricePerKg?: number | null;
+    density?: number | null;
+    /**
+     * 1 = normale Geschwindigkeit, 2 = doppelte Druckzeit
+     */
+    timeFactor?: number | null;
+    /**
+     * 1 = ohne Aufschlag, 2 = doppelter Teilepreis
+     */
+    priceFactor?: number | null;
+    /**
+     * Ohne Farben kann der Kunde einen Farbwunsch eintragen.
+     */
+    colors?:
+      | {
+          name: string;
+          /**
+           * z. B. #1a1a1a
+           */
+          hex?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
   /**
    * Zwei, drei Eigenschaften, z. B. "Zäh, abriebfest".
    */
@@ -419,6 +453,88 @@ export interface InquiryFile {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "orders".
+ */
+export interface Order {
+  id: number;
+  orderNumber: string;
+  status?: ('offen' | 'bezahlt' | 'fertigung' | 'versendet' | 'storniert') | null;
+  paidAt?: string | null;
+  total?: number | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  address?: string | null;
+  fileName?: string | null;
+  file?: (number | null) | QuoteFile;
+  materialName?: string | null;
+  color?: string | null;
+  layer?: string | null;
+  infill?: string | null;
+  quantity?: number | null;
+  express?: boolean | null;
+  delivery?: string | null;
+  leadTime?: string | null;
+  customerNote?: string | null;
+  breakdown?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  stripeSessionId?: string | null;
+  stripePaymentIntent?: string | null;
+  notes?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "quote-files".
+ */
+export interface QuoteFile {
+  id: number;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  focalX?: number | null;
+  focalY?: number | null;
+}
+/**
+ * Berechnungen ohne Bestellung werden nach 7 Tagen samt Datei gelöscht.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "quotes".
+ */
+export interface Quote {
+  id: number;
+  token: string;
+  fileName: string;
+  file?: (number | null) | QuoteFile;
+  ordered?: boolean | null;
+  metrics?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users".
  */
 export interface User {
@@ -494,6 +610,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'inquiry-files';
         value: number | InquiryFile;
+      } | null)
+    | ({
+        relationTo: 'orders';
+        value: number | Order;
+      } | null)
+    | ({
+        relationTo: 'quotes';
+        value: number | Quote;
+      } | null)
+    | ({
+        relationTo: 'quote-files';
+        value: number | QuoteFile;
       } | null)
     | ({
         relationTo: 'users';
@@ -606,6 +734,22 @@ export interface MaterialsSelect<T extends boolean = true> {
   family?: T;
   category?: T;
   process?: T;
+  calc?:
+    | T
+    | {
+        enabled?: T;
+        pricePerKg?: T;
+        density?: T;
+        timeFactor?: T;
+        priceFactor?: T;
+        colors?:
+          | T
+          | {
+              name?: T;
+              hex?: T;
+              id?: T;
+            };
+      };
   keywords?: T;
   summary?: T;
   headline?: T;
@@ -786,6 +930,67 @@ export interface InquiryFilesSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "orders_select".
+ */
+export interface OrdersSelect<T extends boolean = true> {
+  orderNumber?: T;
+  status?: T;
+  paidAt?: T;
+  total?: T;
+  customerName?: T;
+  customerEmail?: T;
+  customerPhone?: T;
+  address?: T;
+  fileName?: T;
+  file?: T;
+  materialName?: T;
+  color?: T;
+  layer?: T;
+  infill?: T;
+  quantity?: T;
+  express?: T;
+  delivery?: T;
+  leadTime?: T;
+  customerNote?: T;
+  breakdown?: T;
+  stripeSessionId?: T;
+  stripePaymentIntent?: T;
+  notes?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "quotes_select".
+ */
+export interface QuotesSelect<T extends boolean = true> {
+  token?: T;
+  fileName?: T;
+  file?: T;
+  ordered?: T;
+  metrics?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "quote-files_select".
+ */
+export interface QuoteFilesSelect<T extends boolean = true> {
+  updatedAt?: T;
+  createdAt?: T;
+  url?: T;
+  thumbnailURL?: T;
+  filename?: T;
+  mimeType?: T;
+  filesize?: T;
+  width?: T;
+  height?: T;
+  focalX?: T;
+  focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
@@ -908,6 +1113,37 @@ export interface Homepage {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "calculator".
+ */
+export interface Calculator {
+  id: number;
+  enabled?: boolean | null;
+  orderFeeGross?: number | null;
+  machineRate?: number | null;
+  /**
+   * Gilt für alle Stück einer Bestellung zusammen.
+   */
+  minPartNet?: number | null;
+  vatPercent?: number | null;
+  discount5?: number | null;
+  discount10?: number | null;
+  discount25?: number | null;
+  expressPercent?: number | null;
+  expressMinGross?: number | null;
+  shippingGross?: number | null;
+  freeShippingFromGross?: number | null;
+  wallMm?: number | null;
+  lineWidthMm?: number | null;
+  speedMmS?: number | null;
+  secondsPerLayer?: number | null;
+  buildX?: number | null;
+  buildY?: number | null;
+  buildZ?: number | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "site-settings".
  */
 export interface SiteSetting {
@@ -984,6 +1220,34 @@ export interface HomepageSelect<T extends boolean = true> {
       };
   inquiryHeadline?: T;
   inquiryText?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "calculator_select".
+ */
+export interface CalculatorSelect<T extends boolean = true> {
+  enabled?: T;
+  orderFeeGross?: T;
+  machineRate?: T;
+  minPartNet?: T;
+  vatPercent?: T;
+  discount5?: T;
+  discount10?: T;
+  discount25?: T;
+  expressPercent?: T;
+  expressMinGross?: T;
+  shippingGross?: T;
+  freeShippingFromGross?: T;
+  wallMm?: T;
+  lineWidthMm?: T;
+  speedMmS?: T;
+  secondsPerLayer?: T;
+  buildX?: T;
+  buildY?: T;
+  buildZ?: T;
   updatedAt?: T;
   createdAt?: T;
   globalType?: T;

@@ -12,8 +12,10 @@ import { Inquiries, InquiryFiles } from './collections/Inquiries'
 import { Materials } from './collections/Materials'
 import { Media } from './collections/Media'
 import { Pages } from './collections/Pages'
+import { Orders, QuoteFiles, Quotes } from './collections/Quotes'
 import { Services } from './collections/Services'
 import { Users } from './collections/Users'
+import { Calculator } from './globals/Calculator'
 import { Homepage } from './globals/Homepage'
 import { SiteSettings } from './globals/SiteSettings'
 import { migrations } from './migrations'
@@ -29,8 +31,8 @@ export default buildConfig({
     meta: { titleSuffix: ' · MINIMO3D' },
   },
   i18n: { supportedLanguages: { de, en }, fallbackLanguage: 'de' },
-  collections: [Services, Materials, Articles, Pages, Media, Inquiries, InquiryFiles, Users],
-  globals: [Homepage, SiteSettings],
+  collections: [Services, Materials, Articles, Pages, Media, Inquiries, InquiryFiles, Orders, Quotes, QuoteFiles, Users],
+  globals: [Homepage, Calculator, SiteSettings],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: { outputFile: path.resolve(dirname, 'payload-types.ts') },

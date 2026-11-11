@@ -42,6 +42,34 @@ export const Materials: CollectionConfig = {
         { name: 'process', type: 'select', label: 'Verfahren', required: true, defaultValue: 'FDM', options: ['FDM', 'SLA'] },
       ],
     },
+    {
+      name: 'calc',
+      type: 'group',
+      label: 'Preisrechner',
+      fields: [
+        { name: 'enabled', type: 'checkbox', label: 'Im Preisrechner anbieten', defaultValue: false },
+        {
+          type: 'row',
+          fields: [
+            { name: 'pricePerKg', type: 'number', label: 'Preis (€ je kg, netto)', min: 0 },
+            { name: 'density', type: 'number', label: 'Dichte (g/cm³)', min: 0 },
+            { name: 'timeFactor', type: 'number', label: 'Zeitfaktor', min: 0, defaultValue: 1, admin: { description: '1 = normale Geschwindigkeit, 2 = doppelte Druckzeit' } },
+            { name: 'priceFactor', type: 'number', label: 'Preisfaktor', min: 0, defaultValue: 1, admin: { description: '1 = ohne Aufschlag, 2 = doppelter Teilepreis' } },
+          ],
+        },
+        {
+          name: 'colors',
+          type: 'array',
+          label: 'Farben',
+          labels: { singular: 'Farbe', plural: 'Farben' },
+          admin: { description: 'Ohne Farben kann der Kunde einen Farbwunsch eintragen.' },
+          fields: [
+            { name: 'name', type: 'text', label: 'Name', required: true },
+            { name: 'hex', type: 'text', label: 'Farbwert', admin: { description: 'z. B. #1a1a1a' } },
+          ],
+        },
+      ],
+    },
     { name: 'keywords', type: 'text', label: 'Stichworte', admin: { description: 'Zwei, drei Eigenschaften, z. B. "Zäh, abriebfest".' } },
     { name: 'summary', type: 'textarea', label: 'Wofür (ein Satz)', required: true },
     { name: 'headline', type: 'text', label: 'Überschrift der Seite' },

@@ -24,8 +24,8 @@ export function Header() {
               {l.label}
             </Link>
           ))}
-          <Link className="btn btn--primary btn--small" href="/kontakt#anfrage">
-            Bauteil anfragen
+          <Link className="btn btn--primary btn--small" href="/preisrechner">
+            Sofortangebot
           </Link>
         </nav>
       </div>

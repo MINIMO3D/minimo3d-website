@@ -9,10 +9,14 @@ const dirname = path.dirname(__filename)
 const nextConfig: NextConfig = {
   output: 'standalone',
   poweredByHeader: false,
+  // Der STEP-Leser bringt eine WebAssembly-Datei mit, die unverändert mit ausgeliefert werden muss.
+  serverExternalPackages: ['occt-import-js'],
+  outputFileTracingIncludes: {
+    '/rechner/analyse': ['./node_modules/occt-import-js/dist/**'],
+    '/rechner/mesh/[token]': ['./node_modules/occt-import-js/dist/**'],
+  },
   async redirects() {
     return [
-      // Der Preisrechner folgt in Phase 2. Bis dahin führt der alte Link zur Anfrage.
-      { source: '/preisrechner', destination: '/kontakt#anfrage', permanent: false },
       { source: '/materialien/vergleich', destination: '/materialien', permanent: false },
     ]
   },
