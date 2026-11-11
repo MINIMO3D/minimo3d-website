@@ -6,6 +6,7 @@ import { h2, p, rt, ul } from './lexical'
 export const settings = {
   company: 'MINIMO3D',
   owner: 'Daniele Bucci',
+  ownerTitle: 'Unternehmensinhaber',
   street: 'Kirchstraße 65',
   city: '73765 Neuhausen auf den Fildern',
   phone: '+49 7158 6883442',
@@ -333,8 +334,6 @@ export const pages = [
         '**Versand:** Deutschland 4,90 €, ab 50 € Warenwert kostenlos. EU ab 14,90 €. Abholung werktags 10–18 Uhr.',
         '**Rückmeldung:** Anfragen beantworten wir innerhalb von 24 Stunden.',
       ]),
-      h2('Inhaber'),
-      p('Daniele Bucci ist Inhaber von MINIMO3D.'),
     ),
     showInquiry: true,
   },

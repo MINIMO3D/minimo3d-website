@@ -992,6 +992,46 @@ a.row:hover .row__name {
   width: 100%;
 }
 
+/* Inhaber auf der Seite Über uns */
+.owner {
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.owner .h2 {
+  font-size: clamp(26px, 3vw, 34px);
+}
+.owner__card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px 32px;
+}
+.owner__photo {
+  display: block;
+  width: 160px;
+  height: 160px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 4px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+a.owner__photo:hover {
+  box-shadow: 0 0 0 3px var(--blue);
+}
+.owner__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.owner__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* ---------- Materialvergleich ---------- */
 .sr-only {
   position: absolute;

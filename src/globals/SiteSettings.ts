@@ -9,6 +9,9 @@ export const SiteSettings: GlobalConfig = {
   fields: [
     { name: 'company', type: 'text', label: 'Firmenname', required: true },
     { name: 'owner', type: 'text', label: 'Inhaber' },
+    { name: 'ownerTitle', type: 'text', label: 'Inhaber: Bezeichnung', admin: { description: 'z. B. "Unternehmensinhaber". Erscheint auf der Seite Über uns.' } },
+    { name: 'ownerPhoto', type: 'upload', relationTo: 'media', label: 'Inhaber: Foto', filterOptions: { mimeType: { contains: 'image' } } },
+    { name: 'ownerLinkedin', type: 'text', label: 'Inhaber: LinkedIn-Profil', admin: { description: 'Vollständige Adresse, z. B. https://www.linkedin.com/in/…' } },
     { name: 'street', type: 'text', label: 'Straße und Hausnummer' },
     { name: 'city', type: 'text', label: 'PLZ und Ort' },
     { name: 'phone', type: 'text', label: 'Telefon' },

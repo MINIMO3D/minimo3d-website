@@ -1150,6 +1150,15 @@ export interface SiteSetting {
   id: number;
   company: string;
   owner?: string | null;
+  /**
+   * z. B. "Unternehmensinhaber". Erscheint auf der Seite Über uns.
+   */
+  ownerTitle?: string | null;
+  ownerPhoto?: (number | null) | Media;
+  /**
+   * Vollständige Adresse, z. B. https://www.linkedin.com/in/…
+   */
+  ownerLinkedin?: string | null;
   street?: string | null;
   city?: string | null;
   phone?: string | null;
@@ -1259,6 +1268,9 @@ export interface CalculatorSelect<T extends boolean = true> {
 export interface SiteSettingsSelect<T extends boolean = true> {
   company?: T;
   owner?: T;
+  ownerTitle?: T;
+  ownerPhoto?: T;
+  ownerLinkedin?: T;
   street?: T;
   city?: T;
   phone?: T;

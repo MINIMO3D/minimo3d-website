@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
 import { CtaBand, Faq, Figure, PageHead } from '@/components/Blocks'
-import { findBySlug } from '@/lib/data'
+import { findBySlug, getSettings, mediaUrl } from '@/lib/data'
 
 type Props = { params: Promise<{ slug: string }> }
 
@@ -18,6 +18,11 @@ export default async function GenericPage({ params }: Props) {
   const page = await findBySlug('pages', slug)
   if (!page) notFound()
 
+  // Auf der Seite "Über uns" erscheint der Inhaber mit Foto aus den Firmendaten.
+  const s = slug === 'ueber-uns' ? await getSettings() : null
+  const photo = s ? mediaUrl(s.ownerPhoto, 'card') : null
+  const linkedin = typeof s?.ownerLinkedin === 'string' && /^https:\/\//.test(s.ownerLinkedin) ? s.ownerLinkedin : null
+
   return (
     <>
       <PageHead eyebrow={page.eyebrow} title={page.title} intro={page.intro} />
@@ -29,6 +34,36 @@ export default async function GenericPage({ params }: Props) {
           </div>
         )}
       </section>
+      {s?.owner && (
+        <section className="wrap" style={{ paddingBottom: 'var(--section)' }}>
+          <div className="owner">
+            <h2 className="h2">Inhaber</h2>
+            <div className="owner__card">
+              {photo &&
+                (linkedin ? (
+                  <a className="owner__photo" href={linkedin} target="_blank" rel="noopener noreferrer" aria-label={`${s.owner} auf LinkedIn`}>
+                    <img src={photo} alt={s.ownerPhoto.alt || s.owner} width={160} height={160} loading="lazy" />
+                  </a>
+                ) : (
+                  <span className="owner__photo">
+                    <img src={photo} alt={s.ownerPhoto.alt || s.owner} width={160} height={160} loading="lazy" />
+                  </span>
+                ))}
+              <div className="owner__text">
+                <p className="h3">{s.owner}</p>
+                <p className="muted">
+                  {s.ownerTitle ? `${s.ownerTitle} bei ${s.company}` : `Inhaber von ${s.company}`}
+                </p>
+                {linkedin && (
+                  <a className="more" href={linkedin} target="_blank" rel="noopener noreferrer">
+                    Profil auf LinkedIn →
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
       {page.faq?.length > 0 && (
         <section className="band">
           <div className="wrap section grid grid--2">

@@ -6,7 +6,7 @@ export const payloadClient = cache(async () => getPayload({ config }))
 
 export const getSettings = cache(async (): Promise<any> => {
   const payload = await payloadClient()
-  return payload.findGlobal({ slug: 'site-settings' })
+  return payload.findGlobal({ slug: 'site-settings', depth: 1 })
 })
 
 export const getHomepage = cache(async (): Promise<any> => {
