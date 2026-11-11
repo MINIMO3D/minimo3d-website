@@ -893,6 +893,7 @@ a.row:hover .row__name {
 .footer__col img {
   height: 34px;
   width: auto;
+  align-self: flex-start;
   margin-bottom: 12px;
 }
 .footer__title {

@@ -9,7 +9,7 @@ export async function Footer() {
       <div className="wrap footer__inner">
         <div className="footer__grid">
           <div className="footer__col">
-            <img src="/logo-white.png" alt="MINIMO3D Additive Manufacturing" width={185} height={34} />
+            <img src="/logo-white.svg" alt="MINIMO3D Additive Manufacturing" width={153} height={34} />
             <span>{s.street}</span>
             <span>{s.city}</span>
           </div>

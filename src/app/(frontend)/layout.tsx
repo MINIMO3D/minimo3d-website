@@ -15,7 +15,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { default: `${s.company} · 3D-Druck bei Stuttgart`, template: `%s · ${s.company}` },
     description: s.seoDescription,
-    icons: { icon: '/favicon.svg' },
+    icons: { icon: '/favicon.svg', apple: '/apple-icon.png' },
   }
 }
 

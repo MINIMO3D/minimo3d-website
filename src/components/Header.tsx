@@ -16,7 +16,7 @@ export function Header() {
       </a>
       <div className="wrap header__inner">
         <Link className="logo" href="/">
-          <img src="/logo.png" alt="MINIMO3D Additive Manufacturing" width={217} height={40} />
+          <img src="/logo.svg" alt="MINIMO3D Additive Manufacturing" width={180} height={40} />
         </Link>
         <nav className="nav" aria-label="Hauptnavigation">
           {links.map((l) => (
