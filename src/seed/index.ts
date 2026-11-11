@@ -1,6 +1,7 @@
 import type { Payload } from 'payload'
 
 import { articles, homepage, pages, services, settings } from './content'
+import { attachHomepageImages } from './homepageImages'
 import { materials } from './materials'
 
 /**
@@ -21,6 +22,8 @@ export const seed = async (payload: Payload): Promise<void> => {
     for (const data of materials) await payload.create({ collection: 'materials', data: data as any })
     for (const data of pages) await payload.create({ collection: 'pages', data: data as any })
     for (const data of articles) await payload.create({ collection: 'articles', data: data as any })
+
+    await attachHomepageImages(payload)
 
     payload.logger.info('Inhalte angelegt.')
   } catch (err) {

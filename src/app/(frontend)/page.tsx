@@ -13,6 +13,7 @@ export default async function HomePage() {
     findAll('materials', { depth: 0, select: { name: true } }),
   ])
   const heroImage = mediaUrl(home.image)
+  const materialsImage = mediaUrl(home.materialsImage)
 
   return (
     <>
@@ -53,13 +54,26 @@ export default async function HomePage() {
       {home.advantages?.length > 0 && (
         <section className="wrap section">
           <div className="advantages">
-            {home.advantages.map((a: any, i: number) => (
-              <div className="rule" key={i}>
-                <span className="mono">{String(i + 1).padStart(2, '0')}</span>
-                <h2 className="h3">{a.title}</h2>
-                <p>{a.text}</p>
-              </div>
-            ))}
+            {home.advantages.map((a: any, i: number) => {
+              const src = mediaUrl(a.image, 'card')
+              return (
+                <div className={src ? 'adv' : 'rule'} key={i}>
+                  {src && (
+                    <img
+                      className="adv__img"
+                      src={src}
+                      alt={a.image.alt || ''}
+                      width={a.image.width}
+                      height={a.image.height}
+                      loading="lazy"
+                    />
+                  )}
+                  <span className="mono">{String(i + 1).padStart(2, '0')}</span>
+                  <h2 className="h3">{a.title}</h2>
+                  <p>{a.text}</p>
+                </div>
+              )
+            })}
           </div>
         </section>
       )}
@@ -89,15 +103,27 @@ export default async function HomePage() {
       </section>
 
       <section className="wrap section stack">
-        <div className="head">
+        <div className={materialsImage ? 'split' : 'head'}>
           <div className="head__text">
             <p className="eyebrow">Materialien</p>
             <h2 className="h2">{home.materialsHeadline || 'Materialien'}</h2>
             {home.materialsText && <p>{home.materialsText}</p>}
+            <Link className="more" href="/materialien">
+              Alle {total.length} Materialien vergleichen →
+            </Link>
           </div>
-          <Link className="more" href="/materialien">
-            Alle {total.length} Materialien vergleichen →
-          </Link>
+          {materialsImage && (
+            <figure className="split__figure">
+              <img
+                src={materialsImage}
+                alt={home.materialsImage.alt || ''}
+                width={home.materialsImage.width}
+                height={home.materialsImage.height}
+                loading="lazy"
+              />
+              {home.materialsImageCaption && <figcaption>{home.materialsImageCaption}</figcaption>}
+            </figure>
+          )}
         </div>
         <div className="rows">
           {materials.map((m) => (

@@ -868,6 +868,7 @@ export interface Homepage {
     | {
         title: string;
         text?: string | null;
+        image?: (number | null) | Media;
         id?: string | null;
       }[]
     | null;
@@ -875,6 +876,8 @@ export interface Homepage {
   servicesNote?: string | null;
   materialsHeadline?: string | null;
   materialsText?: string | null;
+  materialsImage?: (number | null) | Media;
+  materialsImageCaption?: string | null;
   stepsHeadline?: string | null;
   steps?:
     | {
@@ -945,12 +948,15 @@ export interface HomepageSelect<T extends boolean = true> {
     | {
         title?: T;
         text?: T;
+        image?: T;
         id?: T;
       };
   servicesHeadline?: T;
   servicesNote?: T;
   materialsHeadline?: T;
   materialsText?: T;
+  materialsImage?: T;
+  materialsImageCaption?: T;
   stepsHeadline?: T;
   steps?:
     | T

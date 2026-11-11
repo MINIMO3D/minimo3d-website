@@ -401,6 +401,51 @@ a.card:hover {
   background: var(--surface);
 }
 
+/* Advantage cards with picture */
+.adv {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.adv__img {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--line);
+  margin-bottom: 8px;
+}
+.adv p {
+  font-size: 16px;
+  color: var(--text);
+}
+
+/* Text beside a picture */
+.split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+  gap: 40px 64px;
+  align-items: center;
+}
+.split__figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.split__figure img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--line);
+}
+.split__figure figcaption {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* Material rows */
 .rows {
   display: grid;
@@ -895,6 +940,9 @@ a.row:hover .row__name {
 @media (max-width: 640px) {
   body {
     font-size: 16px;
+  }
+  .adv__img {
+    aspect-ratio: 4 / 3;
   }
   .nav {
     gap: 0 20px;

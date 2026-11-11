@@ -35,13 +35,14 @@ export const homepage = {
   advantages: [
     { title: 'Ab einem Stück', text: 'Es gibt keine Mindestmenge. Wir fertigen auch das einzelne Ersatzteil.' },
     { title: 'Im eigenen Haus', text: 'Druck, Nachbearbeitung und Prüfung finden in unserer eigenen Werkstatt statt.' },
-    { title: 'Material mit Plan', text: 'Wir wählen das Material nach Belastung, Temperatur und gewünschter Oberfläche.' },
-    { title: 'Erst prüfen, dann fertigen', text: 'Datei und Einsatzzweck besprechen wir mit Ihnen, bevor der Druck startet.' },
+    { title: 'Material mit Plan', text: 'Ein Scharnier, drei Materialien: Wir wählen nach Belastung, Temperatur und gewünschter Oberfläche.' },
+    { title: 'Erst prüfen, dann fertigen', text: 'Datei und Einsatzzweck besprechen wir mit Ihnen, bevor der Druck startet. Das fertige Teil prüfen wir vor dem Versand.' },
   ],
   servicesHeadline: 'Alles rund um Ihr Bauteil.',
   servicesNote: 'Dazu Nachbearbeitung nach Bedarf: Schleifen, Grundieren und Lackieren.',
   materialsHeadline: 'Das Material entscheidet mit.',
   materialsText: 'Acht Materialien als Einstieg. Insgesamt stehen 43 zur Wahl, von PLA bis Carbon-Nylon.',
+  materialsImageCaption: 'Materialmuster: Farben und Oberflächen im direkten Vergleich',
   stepsHeadline: 'In drei Schritten zum Bauteil.',
   steps: [
     { title: 'Datei und Zweck', text: 'Sie senden uns eine Datei, ein Foto oder eine Beschreibung und sagen, was das Teil leisten soll.' },
