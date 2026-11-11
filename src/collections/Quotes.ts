@@ -1,6 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import path from 'path'
-import { isLoggedIn } from './fields'
+import { isAdminUser, isCustomer, isLoggedIn } from './fields'
 
 const adminOnly = { read: isLoggedIn, create: isLoggedIn, update: isLoggedIn, delete: isLoggedIn }
 
@@ -31,6 +31,7 @@ export const Quotes: CollectionConfig = {
     { name: 'fileName', type: 'text', label: 'Dateiname', required: true },
     { name: 'file', type: 'relationship', relationTo: 'quote-files', label: 'Datei' },
     { name: 'ordered', type: 'checkbox', label: 'Bestellt', defaultValue: false },
+    { name: 'customer', type: 'relationship', relationTo: 'customers', label: 'Kundenkonto', index: true, admin: { description: 'Dateien angemeldeter Kunden bleiben in deren Konto gespeichert, bis sie gelöscht werden.' } },
     { name: 'metrics', type: 'json', label: 'Kennzahlen', admin: { readOnly: true } },
   ],
 }
@@ -43,7 +44,10 @@ export const Orders: CollectionConfig = {
     defaultColumns: ['orderNumber', 'status', 'customerName', 'total', 'createdAt'],
     group: 'Preisrechner',
   },
-  access: adminOnly,
+  access: {
+    ...adminOnly,
+    read: ({ req }) => (isAdminUser(req) ? true : isCustomer(req) ? { customer: { equals: req.user!.id } } : false),
+  },
   defaultSort: '-createdAt',
   fields: [
     { name: 'orderNumber', type: 'text', label: 'Bestellnummer', required: true, unique: true, index: true, admin: { readOnly: true } },
@@ -54,6 +58,7 @@ export const Orders: CollectionConfig = {
       defaultValue: 'offen',
       options: [
         { label: 'Zahlung offen', value: 'offen' },
+        { label: 'Auf Rechnung, Zahlung offen', value: 'rechnung' },
         { label: 'Bezahlt', value: 'bezahlt' },
         { label: 'In Fertigung', value: 'fertigung' },
         { label: 'Versendet / abholbereit', value: 'versendet' },
@@ -62,6 +67,25 @@ export const Orders: CollectionConfig = {
       admin: { position: 'sidebar' },
     },
     { name: 'paidAt', type: 'date', label: 'Bezahlt am', admin: { position: 'sidebar', readOnly: true } },
+    { name: 'customer', type: 'relationship', relationTo: 'customers', label: 'Kundenkonto', index: true, admin: { position: 'sidebar' } },
+    {
+      name: 'paymentMethod',
+      type: 'select',
+      label: 'Zahlungsart',
+      defaultValue: 'stripe',
+      options: [
+        { label: 'Online über Stripe', value: 'stripe' },
+        { label: 'Kauf auf Rechnung', value: 'rechnung' },
+      ],
+      admin: { position: 'sidebar', readOnly: true },
+    },
+    {
+      type: 'row',
+      fields: [
+        { name: 'poNumber', type: 'text', label: 'Bestellreferenz des Kunden' },
+        { name: 'costCentre', type: 'text', label: 'Kostenstelle' },
+      ],
+    },
     { name: 'total', type: 'number', label: 'Gesamt (€, brutto)', admin: { readOnly: true } },
     {
       type: 'row',
@@ -96,6 +120,7 @@ export const Orders: CollectionConfig = {
     { name: 'breakdown', type: 'json', label: 'Preisaufstellung und Kennzahlen', admin: { readOnly: true } },
     { name: 'stripeSessionId', type: 'text', label: 'Stripe-Sitzung', index: true, admin: { readOnly: true } },
     { name: 'stripePaymentIntent', type: 'text', label: 'Stripe-Zahlung', admin: { readOnly: true } },
-    { name: 'notes', type: 'textarea', label: 'Interne Notizen' },
+    // interne Notizen sind für Kunden im Portal und über die API nicht lesbar
+    { name: 'notes', type: 'textarea', label: 'Interne Notizen', access: { read: ({ req }) => isAdminUser(req) } },
   ],
 }

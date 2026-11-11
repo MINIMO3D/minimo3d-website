@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server'
 
-import { findQuote, loadPreview } from '@/lib/calc-server'
+import { findQuote, loadPreview, mayUseQuote } from '@/lib/calc-server'
+import { customerFromRequest } from '@/lib/customer'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 /** Dreiecke für die 3D-Ansicht: rohe Float32-Werte, neun je Dreieck, in Millimetern. */
-export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   const quote = await findQuote(token)
-  if (!quote) return NextResponse.json({ error: 'Nicht gefunden.' }, { status: 404 })
+  if (!quote || !mayUseQuote(quote, await customerFromRequest(req))) return NextResponse.json({ error: 'Nicht gefunden.' }, { status: 404 })
   try {
     const positions = await loadPreview(quote)
     if (!positions) return NextResponse.json({ error: 'Nicht gefunden.' }, { status: 404 })

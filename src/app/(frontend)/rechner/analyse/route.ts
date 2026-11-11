@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 
 import { analyzeFile, cleanupOldQuotes, getCalcSetup, rememberPreview } from '@/lib/calc-server'
+import { customerFromRequest } from '@/lib/customer'
 import { dfmChecks } from '@/lib/mesh/analyze'
 import { isModelFile, ModelError } from '@/lib/mesh/parse'
 
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
 
   const setup = await getCalcSetup()
   if (!setup.enabled) return bad('Der Preisrechner ist gerade nicht verfügbar.', 503)
+  const customer = await customerFromRequest(req)
 
   const buf = Buffer.from(await file.arrayBuffer())
   let analysis
@@ -66,7 +68,7 @@ export async function POST(req: Request) {
     })
     await payload.create({
       collection: 'quotes',
-      data: { token, fileName: file.name.slice(0, 200), file: stored.id, metrics, ordered: false } as any,
+      data: { token, fileName: file.name.slice(0, 200), file: stored.id, metrics, ordered: false, customer: customer?.id } as any,
     })
     rememberPreview(token, mesh.positions)
     void cleanupOldQuotes()

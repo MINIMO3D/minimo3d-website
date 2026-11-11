@@ -2,6 +2,8 @@ import config from '@payload-config'
 import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 
+import { originOf, sendInquiryMail } from '@/lib/mail'
+
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
@@ -57,10 +59,11 @@ export async function POST(req: Request) {
       })
       fileIds.push(doc.id)
     }
-    await payload.create({
+    const inquiry = await payload.create({
       collection: 'inquiries',
       data: { name, email, company, message, consent, files: fileIds, status: 'neu' } as any,
     })
+    await sendInquiryMail(payload, inquiry, fileIds.length, originOf(req))
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('Anfrage fehlgeschlagen', err)

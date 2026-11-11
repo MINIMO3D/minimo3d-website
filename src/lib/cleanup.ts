@@ -10,7 +10,7 @@ export const runCleanup = async (payload: Payload): Promise<void> => {
   try {
     const quotes = await payload.find({
       collection: 'quotes',
-      where: { and: [{ createdAt: { less_than: new Date(Date.now() - 7 * DAY).toISOString() } }, { ordered: { not_equals: true } }] },
+      where: { and: [{ createdAt: { less_than: new Date(Date.now() - 7 * DAY).toISOString() } }, { ordered: { not_equals: true } }, { customer: { exists: false } }] },
       limit: 200,
       depth: 0,
     })

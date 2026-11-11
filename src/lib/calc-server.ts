@@ -88,7 +88,7 @@ export const cleanupOldQuotes = async () => {
     const before = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
     const old = await payload.find({
       collection: 'quotes',
-      where: { and: [{ createdAt: { less_than: before } }, { ordered: { not_equals: true } }] },
+      where: { and: [{ createdAt: { less_than: before } }, { ordered: { not_equals: true } }, { customer: { exists: false } }] },
       limit: 25,
       depth: 0,
     })
@@ -106,4 +106,10 @@ export const siteOrigin = (req: Request) => {
   const proto = req.headers.get('x-forwarded-proto') || new URL(req.url).protocol.replace(':', '')
   const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || new URL(req.url).host
   return `${proto}://${host}`
+}
+
+/** Eine Berechnung, die zu einem Kundenkonto gehört, darf nur dieser Kunde verwenden. */
+export const mayUseQuote = (quote: any, customer: { id: number | string } | null) => {
+  const owner = typeof quote?.customer === 'object' ? quote.customer?.id : quote?.customer
+  return !owner || (customer != null && String(owner) === String(customer.id))
 }

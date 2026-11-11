@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { PageHead } from '@/components/Blocks'
 import { Calculator } from '@/components/calculator/Calculator'
 import { getCalcSetup } from '@/lib/calc-server'
+import { discountOf, getCustomer, hasBilling, isB2B } from '@/lib/customer'
 import { stripeEnabled, stripeTestMode } from '@/lib/stripe'
 
 export const metadata: Metadata = {
@@ -12,10 +13,12 @@ export const metadata: Metadata = {
     '3D-Datei hochladen, Material und Ausführung wählen, Preis sofort sehen und direkt bestellen. Mit 3D-Ansicht und Fertigungsanalyse als PDF.',
 }
 
-type Props = { searchParams: Promise<{ material?: string; abgebrochen?: string }> }
+type Props = {
+  searchParams: Promise<{ material?: string; abgebrochen?: string; datei?: string; m?: string; schicht?: string; fuellung?: string; menge?: string; farbe?: string }>
+}
 
 export default async function CalculatorPage({ searchParams }: Props) {
-  const [params, setup] = await Promise.all([searchParams, getCalcSetup()])
+  const [params, setup, customer] = await Promise.all([searchParams, getCalcSetup(), getCustomer()])
 
   return (
     <>
@@ -38,6 +41,25 @@ export default async function CalculatorPage({ searchParams }: Props) {
             checkoutEnabled={stripeEnabled()}
             testMode={stripeTestMode()}
             initialMaterial={params.material}
+            customer={
+              customer
+                ? {
+                    b2b: isB2B(customer),
+                    discountPercent: discountOf(customer),
+                    invoiceAllowed: Boolean(customer.invoiceAllowed),
+                    invoiceDays: customer.invoiceDays ?? 14,
+                    hasBilling: hasBilling(customer),
+                  }
+                : null
+            }
+            initial={{
+              token: params.datei,
+              materialId: params.m,
+              layer: params.schicht,
+              infill: params.fuellung,
+              quantity: params.menge ? Number(params.menge) : undefined,
+              color: params.farbe,
+            }}
           />
         ) : (
           <div className="calc__empty">

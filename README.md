@@ -48,6 +48,8 @@ npx payload generate:types
 - Bestellungen und hochgeladene Dateien stehen unter Preisrechner › Bestellungen.
 - Stripe: `./scripts/set-stripe-key.sh` trägt den geheimen Schlüssel ein. Ohne Schlüssel zeigt der Rechner den Preis, die Bestellung läuft dann als Anfrage.
 - Optional für Stripe-Webhooks: `STRIPE_WEBHOOK_SECRET` in `.env`, Ziel `https://DOMAIN/rechner/stripe-webhook`, Ereignis `checkout.session.completed`.
+- E-Mail: `./scripts/set-smtp.sh` trägt die Zugangsdaten eines Postfachs ein (Bestellbestätigung, Passwort zurücksetzen, Hinweis bei neuer Bestellung oder Anfrage). Ohne Zugangsdaten sendet die Website keine E-Mails.
+- Kundenkonto: `/konto` (Privat- und Geschäftskunden). Rabatt und Kauf auf Rechnung je Geschäftskunde im Admin-Bereich unter Kunden. Kundenkonten haben keinen Zugang zum Admin-Bereich.
 
 ## Noch offen
 

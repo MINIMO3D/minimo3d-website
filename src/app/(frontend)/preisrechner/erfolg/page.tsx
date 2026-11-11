@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import Link from 'next/link'
 
 import { getSettings, telHref } from '@/lib/data'
 import { euro } from '@/lib/pricing'
+import { originOf } from '@/lib/mail'
 import { getStripe, markOrderPaid } from '@/lib/stripe'
 
 export const metadata: Metadata = { title: 'Bestellung', robots: { index: false } }
@@ -19,7 +21,7 @@ export default async function OrderDonePage({ searchParams }: Props) {
   if (stripe && session_id && /^cs_[A-Za-z0-9_]+$/.test(session_id)) {
     try {
       const session = await stripe.checkout.sessions.retrieve(session_id)
-      order = await markOrderPaid(session)
+      order = await markOrderPaid(session, originOf({ headers: await headers() }))
       paid = session.payment_status === 'paid'
     } catch (err) {
       console.error('Bestellung konnte nicht geladen werden', err)
@@ -61,6 +63,13 @@ export default async function OrderDonePage({ searchParams }: Props) {
               <dd>{euro(Math.round((order.total || 0) * 100))}</dd>
             </div>
           </dl>
+          {order.customer && (
+            <p>
+              <Link href={`/konto/bestellungen/${typeof order.id === 'number' || typeof order.id === 'string' ? order.id : ''}`}>
+                Bestellung im Kundenkonto ansehen
+              </Link>
+            </p>
+          )}
         </>
       ) : order ? (
         <>

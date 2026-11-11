@@ -10,6 +10,7 @@ import {
   formatHours,
   INFILLS,
   LAYERS,
+  netCents,
   type CalcConfig,
   type DeliveryId,
   type InfillId,
@@ -48,6 +49,10 @@ type Props = {
   checkoutEnabled: boolean
   testMode: boolean
   initialMaterial?: string
+  /** Angemeldeter Kunde; null = Bestellung als Gast */
+  customer?: { b2b: boolean; discountPercent: number; invoiceAllowed: boolean; invoiceDays: number; hasBilling: boolean } | null
+  /** Gespeicherte Datei wieder öffnen (Nachbestellen aus dem Kundenkonto) */
+  initial?: { token?: string; materialId?: string; layer?: string; infill?: string; quantity?: number; color?: string }
 }
 
 const ACCEPT = '.stl,.stp,.step,.obj,.3mf'
@@ -64,7 +69,9 @@ const fits = (size: number[], cfg: CalcConfig) => {
   return a[0] <= b[0] && a[1] <= b[1] && a[2] <= b[2]
 }
 
-export function Calculator({ materials, config, checkoutEnabled, testMode, initialMaterial }: Props) {
+export function Calculator({ materials, config, checkoutEnabled, testMode, initialMaterial, customer = null, initial }: Props) {
+  const b2b = Boolean(customer?.b2b)
+  const canInvoice = Boolean(b2b && customer?.invoiceAllowed)
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
   const [positions, setPositions] = useState<Float32Array | null>(null)
   const [busy, setBusy] = useState<'upload' | 'pdf' | 'checkout' | null>(null)
@@ -72,17 +79,20 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
   const [dragging, setDragging] = useState(false)
 
   const [materialId, setMaterialId] = useState<string>(() => {
-    const wanted = materials.find((m) => m.slug === initialMaterial)
+    const wanted = materials.find((m) => String(m.id) === initial?.materialId) || materials.find((m) => m.slug === initialMaterial)
     return String((wanted || materials[0])?.id ?? '')
   })
-  const [color, setColor] = useState('')
-  const [layer, setLayer] = useState<LayerId>('standard')
-  const [infill, setInfill] = useState<InfillId>('standard')
-  const [quantity, setQuantity] = useState(1)
+  const [color, setColor] = useState(initial?.color || '')
+  const [layer, setLayer] = useState<LayerId>(LAYERS.some((l) => l.id === initial?.layer) ? (initial!.layer as LayerId) : 'standard')
+  const [infill, setInfill] = useState<InfillId>(INFILLS.some((i) => i.id === initial?.infill) ? (initial!.infill as InfillId) : 'standard')
+  const [quantity, setQuantity] = useState(() => clampQuantity(initial?.quantity || 1))
   const [express, setExpress] = useState(false)
   const [delivery, setDelivery] = useState<DeliveryId>('versand')
   const [note, setNote] = useState('')
   const [accepted, setAccepted] = useState(false)
+  const [poNumber, setPoNumber] = useState('')
+  const [costCentre, setCostCentre] = useState('')
+  const [payment, setPayment] = useState<'stripe' | 'rechnung'>(canInvoice && customer?.hasBilling ? 'rechnung' : 'stripe')
 
   const viewer = useRef<ViewerHandle>(null)
   const input = useRef<HTMLInputElement>(null)
@@ -117,11 +127,12 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
               quantity: qty,
               express,
               delivery,
+              customerDiscountPercent: customer?.discountPercent || 0,
             },
             config,
           )
         : null,
-    [analysis, material, layer, infill, express, delivery, config],
+    [analysis, material, layer, infill, express, delivery, config, customer],
   )
   const price = priceFor(quantity)
   const fitsBuild = analysis ? fits(analysis.metrics.size, config) : true
@@ -158,6 +169,37 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
       if (input.current) input.current.value = ''
     }
   }
+
+  // Gespeicherte Datei aus dem Kundenkonto wieder öffnen
+  useEffect(() => {
+    const token = initial?.token
+    if (!token || !/^[A-Za-z0-9_-]{10,100}$/.test(token)) return
+    let stop = false
+    ;(async () => {
+      setBusy('upload')
+      try {
+        const res = await fetch(`/rechner/berechnung/${token}`)
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(json.error || 'Die Datei konnte nicht geladen werden.')
+        const meshRes = await fetch(`/rechner/mesh/${token}`)
+        if (!meshRes.ok) throw new Error('Die 3D-Ansicht konnte nicht geladen werden.')
+        const buffer = await meshRes.arrayBuffer()
+        if (stop) return
+        setPositions(new Float32Array(buffer))
+        setAnalysis(json as Analysis)
+      } catch (err) {
+        if (!stop) setError(err instanceof Error ? err.message : 'Die Datei konnte nicht geladen werden.')
+      } finally {
+        if (!stop) setBusy(null)
+      }
+    })()
+    return () => {
+      stop = true
+    }
+  }, [initial?.token])
+
+  /** Geschäftskunden sehen Nettopreise. */
+  const show = (cents: number) => euro(b2b ? netCents(cents, config.vatPercent) : cents)
 
   const selection = () => ({ token: analysis?.token, materialId, color, layer, infill, quantity, express, delivery })
 
@@ -200,7 +242,7 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
       const res = await fetch('/rechner/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...selection(), note, accepted }),
+        body: JSON.stringify({ ...selection(), note, accepted, poNumber, costCentre, payment: canInvoice ? payment : 'stripe' }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json.url) throw new Error(json.error || 'Die Kasse konnte nicht geöffnet werden.')
@@ -511,35 +553,57 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
           {analysis && price && fitsBuild && (
             <>
               <p className="total">
-                <span className="total__amount">{euro(price.totalCents)}</span>
-                <span className="total__note">inkl. 19 % MwSt.{price.shippingCents ? ' und Versand' : ''}</span>
+                <span className="total__amount">{b2b ? euro(price.totalCents - price.vatCents) : euro(price.totalCents)}</span>
+                <span className="total__note">
+                  {b2b ? 'netto, zzgl. 19 % MwSt.' : 'inkl. 19 % MwSt.'}
+                  {price.shippingCents ? (b2b ? ', inkl. Versand' : ' und Versand') : ''}
+                </span>
               </p>
               <dl className="sum">
                 <div>
                   <dt>
-                    {quantity} × {euro(price.unitCents)}
+                    {quantity} × {show(price.unitCents)}
                     {price.discountPercent ? ` (${num(price.discountPercent, 0)} % Mengenrabatt enthalten)` : ''}
                   </dt>
-                  <dd>{euro(price.partsCents)}</dd>
+                  <dd>{show(price.partsCents)}</dd>
                 </div>
+                {price.customerDiscountPercent > 0 && (
+                  <div className="sum__muted">
+                    <dt>Ihr Kundenrabatt</dt>
+                    <dd>{num(price.customerDiscountPercent, 0)} % enthalten</dd>
+                  </div>
+                )}
                 <div>
                   <dt>Auftragspauschale</dt>
-                  <dd>{euro(price.feeCents)}</dd>
+                  <dd>{show(price.feeCents)}</dd>
                 </div>
                 {price.expressCents > 0 && (
                   <div>
                     <dt>Express</dt>
-                    <dd>{euro(price.expressCents)}</dd>
+                    <dd>{show(price.expressCents)}</dd>
                   </div>
                 )}
                 <div>
                   <dt>{delivery === 'versand' ? 'DHL-Versand' : 'Abholung'}</dt>
-                  <dd>{price.shippingCents ? euro(price.shippingCents) : 'kostenlos'}</dd>
+                  <dd>{price.shippingCents ? show(price.shippingCents) : 'kostenlos'}</dd>
                 </div>
-                <div className="sum__muted">
-                  <dt>Enthaltene MwSt.</dt>
-                  <dd>{euro(price.vatCents)}</dd>
-                </div>
+                {b2b ? (
+                  <>
+                    <div>
+                      <dt>19 % MwSt.</dt>
+                      <dd>{euro(price.vatCents)}</dd>
+                    </div>
+                    <div className="sum__total">
+                      <dt>Gesamt brutto</dt>
+                      <dd>{euro(price.totalCents)}</dd>
+                    </div>
+                  </>
+                ) : (
+                  <div className="sum__muted">
+                    <dt>Enthaltene MwSt.</dt>
+                    <dd>{euro(price.vatCents)}</dd>
+                  </div>
+                )}
               </dl>
               <dl className="facts facts--tight">
                 <div>
@@ -562,7 +626,7 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
                   return p ? (
                     <button key={q} type="button" className={`ladder__cell${quantity === q ? ' ladder__cell--on' : ''}`} onClick={() => setQuantity(q)}>
                       <span>{q} Stück</span>
-                      <strong>{euro(p.unitCents)}</strong>
+                      <strong>{show(p.unitCents)}</strong>
                     </button>
                   ) : null
                 })}
@@ -575,14 +639,51 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
                 </p>
               )}
 
+              {b2b && (
+                <div className="form__row">
+                  <div className="field">
+                    <label htmlFor="calc-po">Ihre Bestellreferenz (optional)</label>
+                    <input id="calc-po" type="text" maxLength={60} value={poNumber} onChange={(e) => setPoNumber(e.target.value)} placeholder="z. B. PO-2026-0815" />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="calc-cc">Kostenstelle (optional)</label>
+                    <input id="calc-cc" type="text" maxLength={60} value={costCentre} onChange={(e) => setCostCentre(e.target.value)} />
+                  </div>
+                </div>
+              )}
+
+              {canInvoice && (
+                <fieldset className="field">
+                  <legend>Zahlungsart</legend>
+                  <label className="option">
+                    <input type="radio" name="payment" checked={payment === 'rechnung'} disabled={!customer?.hasBilling} onChange={() => setPayment('rechnung')} />
+                    <span>
+                      Kauf auf Rechnung, zahlbar in {customer?.invoiceDays ?? 14} Tagen
+                      {!customer?.hasBilling && (
+                        <>
+                          {' '}
+                          (bitte zuerst die <Link href="/konto/profil">Rechnungsadresse</Link> hinterlegen)
+                        </>
+                      )}
+                    </span>
+                  </label>
+                  {checkoutEnabled && (
+                    <label className="option">
+                      <input type="radio" name="payment" checked={payment === 'stripe'} onChange={() => setPayment('stripe')} />
+                      <span>Sofort online zahlen über Stripe</span>
+                    </label>
+                  )}
+                </fieldset>
+              )}
+
               <div className="field">
                 <label htmlFor="calc-note">Hinweis zum Auftrag (optional)</label>
                 <textarea id="calc-note" rows={2} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} />
               </div>
 
-              {checkoutEnabled ? (
+              {checkoutEnabled || (canInvoice && customer?.hasBilling) ? (
                 <>
-                  {testMode && (
+                  {testMode && payment === 'stripe' && (
                     <p className="form__msg form__msg--ok">Testmodus: Die Kasse arbeitet mit Testzahlungen. Es wird nichts abgebucht.</p>
                   )}
                   <label className="consent">
@@ -594,9 +695,24 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
                     </span>
                   </label>
                   <button className="btn btn--primary" type="submit" disabled={busy === 'checkout'}>
-                    {busy === 'checkout' ? 'Kasse wird geöffnet …' : 'Weiter zur Zahlung'}
+                    {payment === 'rechnung' && canInvoice
+                      ? busy === 'checkout'
+                        ? 'Bestellung wird gesendet …'
+                        : 'Zahlungspflichtig bestellen'
+                      : busy === 'checkout'
+                        ? 'Kasse wird geöffnet …'
+                        : 'Weiter zur Zahlung'}
                   </button>
-                  <p className="small muted">Sie zahlen sicher über Stripe. Dort geben Sie auch Ihre Adresse ein.</p>
+                  <p className="small muted">
+                    {payment === 'rechnung' && canInvoice
+                      ? 'Rechnung und Lieferung gehen an die Adressen aus Ihrem Kundenkonto.'
+                      : 'Sie zahlen sicher über Stripe. Dort geben Sie auch Ihre Adresse ein.'}
+                  </p>
+                  {customer === null && (
+                    <p className="small muted">
+                      Mit einem <Link href="/konto/anmelden?weiter=/preisrechner">Kundenkonto</Link> bleiben Dateien und Bestellungen gespeichert.
+                    </p>
+                  )}
                 </>
               ) : (
                 <>

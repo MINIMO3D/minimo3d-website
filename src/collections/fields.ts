@@ -35,4 +35,10 @@ export const titleTextArray = (name: string, label: string, singular: string): F
   ],
 })
 
-export const isLoggedIn = ({ req }: { req: { user?: unknown } }) => Boolean(req.user)
+/**
+ * Nur Mitarbeiter (Sammlung "users") dürfen Inhalte ändern und interne Daten lesen.
+ * Angemeldete Kunden (Sammlung "customers") zählen ausdrücklich nicht dazu.
+ */
+export const isAdminUser = (req: { user?: any }) => Boolean(req.user && req.user.collection === 'users')
+export const isLoggedIn = ({ req }: { req: { user?: any } }) => isAdminUser(req)
+export const isCustomer = (req: { user?: any }) => Boolean(req.user && req.user.collection === 'customers')

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 
 import { resolveSelection } from '@/lib/calc-selection'
-import { findQuote } from '@/lib/calc-server'
+import { findQuote, mayUseQuote } from '@/lib/calc-server'
+import { customerFromRequest } from '@/lib/customer'
 import { getSettings } from '@/lib/data'
 import { buildDfmPdf } from '@/lib/dfm-pdf'
 import { dfmChecks, type Metrics } from '@/lib/mesh/analyze'
@@ -16,8 +17,9 @@ const comma = (n: number, d = 1) => n.toLocaleString('de-DE', { minimumFractionD
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null)
   const quote = await findQuote(body?.token)
-  if (!quote) return bad('Die Berechnung ist abgelaufen. Bitte laden Sie die Datei erneut hoch.', 404)
-  const sel = await resolveSelection(quote, body)
+  const customer = await customerFromRequest(req)
+  if (!quote || !mayUseQuote(quote, customer)) return bad('Die Berechnung ist abgelaufen. Bitte laden Sie die Datei erneut hoch.', 404)
+  const sel = await resolveSelection(quote, body, customer)
   if ('error' in sel) return bad(sel.error)
 
   let snapshot: Uint8Array | null = null
@@ -53,6 +55,7 @@ export async function POST(req: Request) {
       ? [
           { label: 'Preis je Stück', value: euro(p.unitCents) },
           ...(p.discountPercent ? [{ label: 'Mengenrabatt', value: `${comma(p.discountPercent, 0)} %, im Stückpreis enthalten` }] : []),
+          ...(p.customerDiscountPercent ? [{ label: 'Ihr Kundenrabatt', value: `${comma(p.customerDiscountPercent, 0)} %, im Stückpreis enthalten` }] : []),
           { label: 'Auftragspauschale', value: euro(p.feeCents) },
           ...(p.expressCents ? [{ label: 'Express', value: euro(p.expressCents) }] : []),
           { label: sel.delivery === 'versand' ? 'DHL-Versand' : 'Abholung', value: euro(p.shippingCents) },

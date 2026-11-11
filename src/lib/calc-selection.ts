@@ -1,4 +1,5 @@
 import { geometryOf, getCalcSetup, type CalcMaterial } from './calc-server'
+import { discountOf, type Customer } from './customer'
 import { fitsBuildVolume, type Metrics } from './mesh/analyze'
 import { calculatePrice, clampQuantity, INFILLS, LAYERS, type CalcConfig, type DeliveryId, type InfillId, type LayerId, type PriceResult } from './pricing'
 
@@ -16,7 +17,7 @@ export type Selection = {
 }
 
 /** Prüft die Auswahl aus dem Browser und rechnet den Preis auf dem Server neu. */
-export const resolveSelection = async (quote: any, body: any): Promise<Selection | { error: string }> => {
+export const resolveSelection = async (quote: any, body: any, customer: Customer | null = null): Promise<Selection | { error: string }> => {
   const setup = await getCalcSetup()
   if (!setup.enabled) return { error: 'Der Preisrechner ist gerade nicht verfügbar.' }
   const material = setup.materials.find((m) => String(m.id) === String(body?.materialId))
@@ -36,7 +37,7 @@ export const resolveSelection = async (quote: any, body: any): Promise<Selection
 
   const metrics = quote.metrics as Metrics
   const price = calculatePrice(
-    { geometry: geometryOf(metrics), material, layer: layer.id, infill: infill.id, quantity, express, delivery },
+    { geometry: geometryOf(metrics), material, layer: layer.id, infill: infill.id, quantity, express, delivery, customerDiscountPercent: discountOf(customer) },
     setup.config,
   )
   const cfg = setup.config

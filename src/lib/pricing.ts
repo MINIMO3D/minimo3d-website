@@ -85,12 +85,15 @@ export type PriceInput = {
   quantity: number
   express: boolean
   delivery: DeliveryId
+  /** individueller Kundenrabatt in Prozent (Geschäftskunden) */
+  customerDiscountPercent?: number
 }
 
 export type PriceResult = {
   gramsPerPart: number
   hoursPerPart: number
   discountPercent: number
+  customerDiscountPercent: number
   /** alle Beträge in Cent, brutto */
   unitCents: number
   partsCents: number
@@ -129,7 +132,8 @@ export const calculatePrice = (input: PriceInput, cfg: CalcConfig): PriceResult 
   const vat = 1 + cfg.vatPercent / 100
 
   // Der Mindestpreis gilt für die ganze Position, nicht je Stück
-  const lineNet = Math.max(cfg.minPartNet, partNet * (1 - discountPercent / 100) * qty)
+  const customerDiscountPercent = Math.min(50, Math.max(0, input.customerDiscountPercent || 0))
+  const lineNet = Math.max(cfg.minPartNet, partNet * (1 - discountPercent / 100) * (1 - customerDiscountPercent / 100) * qty)
   const unitCents = Math.round((lineNet / qty) * vat * 100)
   const partsCents = unitCents * qty
   const feeCents = Math.round(cfg.orderFeeGross * 100)
@@ -147,7 +151,7 @@ export const calculatePrice = (input: PriceInput, cfg: CalcConfig): PriceResult 
   const tier = table.find(([limit]) => totalHours <= limit)
   const leadTime = tier ? `${tier[1]} Werktage` : 'nach Absprache'
 
-  return { gramsPerPart: grams, hoursPerPart: hours, discountPercent, unitCents, partsCents, feeCents, expressCents, shippingCents, totalCents, vatCents, leadTime }
+  return { gramsPerPart: grams, hoursPerPart: hours, discountPercent, customerDiscountPercent, unitCents, partsCents, feeCents, expressCents, shippingCents, totalCents, vatCents, leadTime }
 }
 
 export const euro = (cents: number) => (cents / 100).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
@@ -158,3 +162,6 @@ export const formatHours = (h: number) => {
   const mm = total % 60
   return hh ? `${hh} h ${String(mm).padStart(2, '0')} min` : `${mm} min`
 }
+
+/** Nettobetrag zu einem Bruttobetrag in Cent. */
+export const netCents = (grossCents: number, vatPercent: number) => Math.round(grossCents / (1 + vatPercent / 100))

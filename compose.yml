@@ -27,6 +27,12 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       SITE_URL: ${SITE_URL:-}
+      # E-Mail-Versand: leer = es werden keine E-Mails gesendet (siehe scripts/set-smtp.sh)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     volumes:
       - media:/app/media
       - inquiry_files:/app/inquiry-files

@@ -63,6 +63,7 @@ export type SupportedTimezones =
 
 export interface Config {
   auth: {
+    customers: CustomerAuthOperations;
     users: UserAuthOperations;
   };
   blocks: {};
@@ -77,6 +78,7 @@ export interface Config {
     orders: Order;
     quotes: Quote;
     'quote-files': QuoteFile;
+    customers: Customer;
     users: User;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
@@ -95,6 +97,7 @@ export interface Config {
     orders: OrdersSelect<false> | OrdersSelect<true>;
     quotes: QuotesSelect<false> | QuotesSelect<true>;
     'quote-files': QuoteFilesSelect<false> | QuoteFilesSelect<true>;
+    customers: CustomersSelect<false> | CustomersSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -119,10 +122,28 @@ export interface Config {
   widgets: {
     collections: CollectionsWidget;
   };
-  user: User;
+  user: Customer | User;
   jobs: {
     tasks: unknown;
     workflows: unknown;
+  };
+}
+export interface CustomerAuthOperations {
+  forgotPassword: {
+    email: string;
+    password: string;
+  };
+  login: {
+    email: string;
+    password: string;
+  };
+  registerFirstUser: {
+    email: string;
+    password: string;
+  };
+  unlock: {
+    email: string;
+    password: string;
   };
 }
 export interface UserAuthOperations {
@@ -458,8 +479,12 @@ export interface InquiryFile {
 export interface Order {
   id: number;
   orderNumber: string;
-  status?: ('offen' | 'bezahlt' | 'fertigung' | 'versendet' | 'storniert') | null;
+  status?: ('offen' | 'rechnung' | 'bezahlt' | 'fertigung' | 'versendet' | 'storniert') | null;
   paidAt?: string | null;
+  customer?: (number | null) | Customer;
+  paymentMethod?: ('stripe' | 'rechnung') | null;
+  poNumber?: string | null;
+  costCentre?: string | null;
   total?: number | null;
   customerName?: string | null;
   customerEmail?: string | null;
@@ -492,6 +517,64 @@ export interface Order {
   createdAt: string;
 }
 /**
+ * Rabatt und Kauf auf Rechnung legen Sie je Geschäftskunde hier fest.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "customers".
+ */
+export interface Customer {
+  id: number;
+  type: 'b2c' | 'b2b';
+  firstName: string;
+  lastName: string;
+  phone?: string | null;
+  company?: string | null;
+  vatId?: string | null;
+  vatStatus?: ('ungeprueft' | 'gueltig' | 'ungueltig') | null;
+  vatCheckedAt?: string | null;
+  /**
+   * Gilt im Preisrechner auf den Teilepreis.
+   */
+  discountPercent?: number | null;
+  invoiceAllowed?: boolean | null;
+  invoiceDays?: number | null;
+  billing?: {
+    street?: string | null;
+    zip?: string | null;
+    city?: string | null;
+    country?: string | null;
+  };
+  shippingSame?: boolean | null;
+  shipping?: {
+    name?: string | null;
+    street?: string | null;
+    zip?: string | null;
+    city?: string | null;
+    country?: string | null;
+  };
+  acceptedTermsAt?: string | null;
+  notes?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  resetPasswordRequestedAt?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
+  password?: string | null;
+  collection: 'customers';
+}
+/**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "quote-files".
  */
@@ -521,6 +604,10 @@ export interface Quote {
   fileName: string;
   file?: (number | null) | QuoteFile;
   ordered?: boolean | null;
+  /**
+   * Dateien angemeldeter Kunden bleiben in deren Konto gespeichert, bis sie gelöscht werden.
+   */
+  customer?: (number | null) | Customer;
   metrics?:
     | {
         [k: string]: unknown;
@@ -624,14 +711,23 @@ export interface PayloadLockedDocument {
         value: number | QuoteFile;
       } | null)
     | ({
+        relationTo: 'customers';
+        value: number | Customer;
+      } | null)
+    | ({
         relationTo: 'users';
         value: number | User;
       } | null);
   globalSlug?: string | null;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'customers';
+        value: number | Customer;
+      }
+    | {
+        relationTo: 'users';
+        value: number | User;
+      };
   updatedAt: string;
   createdAt: string;
 }
@@ -641,10 +737,15 @@ export interface PayloadLockedDocument {
  */
 export interface PayloadPreference {
   id: number;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'customers';
+        value: number | Customer;
+      }
+    | {
+        relationTo: 'users';
+        value: number | User;
+      };
   key?: string | null;
   value?:
     | {
@@ -936,6 +1037,10 @@ export interface OrdersSelect<T extends boolean = true> {
   orderNumber?: T;
   status?: T;
   paidAt?: T;
+  customer?: T;
+  paymentMethod?: T;
+  poNumber?: T;
+  costCentre?: T;
   total?: T;
   customerName?: T;
   customerEmail?: T;
@@ -968,6 +1073,7 @@ export interface QuotesSelect<T extends boolean = true> {
   fileName?: T;
   file?: T;
   ordered?: T;
+  customer?: T;
   metrics?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -988,6 +1094,60 @@ export interface QuoteFilesSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "customers_select".
+ */
+export interface CustomersSelect<T extends boolean = true> {
+  type?: T;
+  firstName?: T;
+  lastName?: T;
+  phone?: T;
+  company?: T;
+  vatId?: T;
+  vatStatus?: T;
+  vatCheckedAt?: T;
+  discountPercent?: T;
+  invoiceAllowed?: T;
+  invoiceDays?: T;
+  billing?:
+    | T
+    | {
+        street?: T;
+        zip?: T;
+        city?: T;
+        country?: T;
+      };
+  shippingSame?: T;
+  shipping?:
+    | T
+    | {
+        name?: T;
+        street?: T;
+        zip?: T;
+        city?: T;
+        country?: T;
+      };
+  acceptedTermsAt?: T;
+  notes?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  email?: T;
+  resetPasswordToken?: T;
+  resetPasswordExpiration?: T;
+  salt?: T;
+  hash?: T;
+  resetPasswordRequestedAt?: T;
+  loginAttempts?: T;
+  lockUntil?: T;
+  sessions?:
+    | T
+    | {
+        id?: T;
+        createdAt?: T;
+        expiresAt?: T;
+      };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

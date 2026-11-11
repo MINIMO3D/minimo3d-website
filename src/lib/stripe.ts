@@ -2,6 +2,8 @@ import config from '@payload-config'
 import { getPayload } from 'payload'
 import Stripe from 'stripe'
 
+import { sendOrderMails } from './mail'
+
 let client: Stripe | null = null
 
 export const stripeEnabled = () => Boolean(process.env.STRIPE_SECRET_KEY)
@@ -17,7 +19,7 @@ const formatAddress = (name?: string | null, a?: Stripe.Address | null) =>
   [name, a?.line1, a?.line2, [a?.postal_code, a?.city].filter(Boolean).join(' '), a?.country].filter(Boolean).join('\n')
 
 /** Bestellung als bezahlt markieren. Darf mehrfach aufgerufen werden (Rückkehrseite und Webhook). */
-export const markOrderPaid = async (session: Stripe.Checkout.Session): Promise<any | null> => {
+export const markOrderPaid = async (session: Stripe.Checkout.Session, origin = process.env.SITE_URL || ''): Promise<any | null> => {
   const payload = await getPayload({ config })
   const found = await payload.find({
     collection: 'orders',
@@ -54,5 +56,6 @@ export const markOrderPaid = async (session: Stripe.Checkout.Session): Promise<a
   if (order.breakdown?.quoteId)
     await payload.update({ collection: 'quotes', id: order.breakdown.quoteId, data: { ordered: true } as any }).catch(() => null)
   payload.logger.info(`Bestellung ${order.orderNumber} bezahlt.`)
+  await sendOrderMails(payload, updated, origin)
   return updated
 }

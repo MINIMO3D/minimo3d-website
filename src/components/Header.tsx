@@ -1,5 +1,7 @@
 import Link from 'next/link'
 
+import { getCustomer } from '@/lib/customer'
+
 const links = [
   { href: '/leistungen', label: 'Leistungen' },
   { href: '/materialien', label: 'Materialien' },
@@ -8,7 +10,8 @@ const links = [
   { href: '/kontakt', label: 'Kontakt' },
 ]
 
-export function Header() {
+export async function Header() {
+  const customer = await getCustomer().catch(() => null)
   return (
     <header className="header">
       <a className="skip" href="#inhalt">
@@ -24,6 +27,9 @@ export function Header() {
               {l.label}
             </Link>
           ))}
+          <Link className="btn btn--ghost btn--small" href={customer ? '/konto' : '/konto/anmelden'}>
+            {customer ? 'Mein Konto' : 'Login'}
+          </Link>
           <Link className="btn btn--primary btn--small" href="/preisrechner">
             Sofortangebot
           </Link>
