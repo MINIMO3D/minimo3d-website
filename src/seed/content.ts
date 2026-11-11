@@ -1,3 +1,4 @@
+import { agb, datenschutz, impressum } from './legal'
 import { h2, p, rt, ul } from './lexical'
 
 // Erstbefüllung, übernommen von der bisherigen Website (Stand November 2026).
@@ -300,9 +301,6 @@ export const services = [
   },
 ]
 
-const legalNote =
-  'Dieser Text muss noch aus der bisherigen Website übernommen werden. Bitte fügen Sie ihn hier im Admin-Bereich unter Inhalte › Seiten ein.'
-
 export const pages = [
   {
     title: 'Über uns',
@@ -369,25 +367,9 @@ export const pages = [
     ],
     showInquiry: true,
   },
-  {
-    title: 'Impressum',
-    slug: 'impressum',
-    content: rt(
-      h2('Angaben gemäß § 5 DDG'),
-      p('MINIMO3D, Inhaber: Daniele Bucci, Kirchstraße 65, 73765 Neuhausen auf den Fildern, Deutschland'),
-      h2('Kontakt'),
-      p('Telefon: +49 7158 6883442 · E-Mail: support@minimo3d.com'),
-      h2('Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV'),
-      p('Daniele Bucci, Anschrift wie oben'),
-      h2('Umsatzsteuer-ID'),
-      p('DE286185561'),
-      h2('Weitere Angaben'),
-      p('Die Abschnitte Haftung für Inhalte, Haftung für Links, Urheberrecht und Verbraucherstreitbeilegung müssen noch aus der bisherigen Website übernommen werden. Bitte fügen Sie sie hier im Admin-Bereich unter Inhalte › Seiten ein.'),
-    ),
-    showInquiry: false,
-  },
-  { title: 'Datenschutz', slug: 'datenschutz', content: rt(p(legalNote)), showInquiry: false },
-  { title: 'AGB', slug: 'agb', content: rt(p(legalNote)), showInquiry: false },
+  { title: 'Impressum', slug: 'impressum', content: impressum, showInquiry: false },
+  { title: 'Datenschutzerklärung', slug: 'datenschutz', content: datenschutz, showInquiry: false },
+  { title: 'Allgemeine Geschäftsbedingungen', slug: 'agb', content: agb, showInquiry: false },
 ]
 
 export const articles = [

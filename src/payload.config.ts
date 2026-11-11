@@ -18,6 +18,7 @@ import { Users } from './collections/Users'
 import { Calculator } from './globals/Calculator'
 import { Homepage } from './globals/Homepage'
 import { SiteSettings } from './globals/SiteSettings'
+import { startCleanup } from './lib/cleanup'
 import { migrations } from './migrations'
 import { seed } from './seed'
 
@@ -44,5 +45,6 @@ export default buildConfig({
   upload: { limits: { fileSize: 50 * 1024 * 1024 } },
   onInit: async (payload) => {
     await seed(payload)
+    startCleanup(payload)
   },
 })
