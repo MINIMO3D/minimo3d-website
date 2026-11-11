@@ -2,6 +2,7 @@ import * as migration_20261110_195947_initial from './20261110_195947_initial';
 import * as migration_20261111_170645_homepage_images from './20261111_170645_homepage_images';
 import * as migration_20261111_185056_hero_video from './20261111_185056_hero_video';
 import * as migration_20261111_192748_calculator from './20261111_192748_calculator';
+import * as migration_20261111_200000_material_ratings from './20261111_200000_material_ratings';
 
 export const migrations = [
   {
@@ -23,5 +24,10 @@ export const migrations = [
     up: migration_20261111_192748_calculator.up,
     down: migration_20261111_192748_calculator.down,
     name: '20261111_192748_calculator'
+  },
+  {
+    up: migration_20261111_200000_material_ratings.up,
+    down: migration_20261111_200000_material_ratings.down,
+    name: '20261111_200000_material_ratings',
   },
 ];

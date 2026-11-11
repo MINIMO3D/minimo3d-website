@@ -1,3 +1,5 @@
+import { ratingsFor } from './ratings'
+
 // Erstbefüllung der Materialien. Danach werden sie im Admin-Bereich gepflegt.
 
 type M = [name: string, family: string, category: string, summary: string, keywords?: string]
@@ -141,5 +143,6 @@ export const materials = list.map(([name, family, category, summary, keywords], 
   keywords,
   featured: Boolean(keywords),
   calc: calcFor(name),
+  ...(ratingsFor(name) ? { ratings: ratingsFor(name) } : {}),
   ...(name === 'PLA Basic' ? plaBasic : {}),
 }))

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 import { CtaBand, MaterialRow, PageHead } from '@/components/Blocks'
 import { findAll, getHomepage } from '@/lib/data'
@@ -26,6 +27,14 @@ export default async function MaterialsPage() {
         intro={`${materials.length} Materialien stehen zur Wahl: ${fdm} Kunststoffe für den FDM-Druck und ${sla} Harze für den SLA-Druck. Wir schlagen Ihnen anhand von Belastung, Temperatur und Oberfläche das passende vor.`}
       />
       <section className="wrap section stack">
+        <div className="note" style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px 32px' }}>
+          <p>
+            <strong>Alle Materialien nebeneinander:</strong> Steifigkeit, Zähigkeit, Hitze, Außeneinsatz und Preisniveau im Vergleich.
+          </p>
+          <Link className="btn btn--primary" href="/materialien/vergleich">
+            Materialien vergleichen
+          </Link>
+        </div>
         {families.map((f) => (
           <div className="family" key={f}>
             <h2 className="h3">{f}</h2>

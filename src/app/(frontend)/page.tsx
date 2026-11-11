@@ -31,7 +31,7 @@ export default async function HomePage() {
               <Link className="btn btn--primary" href="/preisrechner">
                 {home.heroButtonLabel || 'Sofortangebot'}
               </Link>
-              <Link className="btn btn--onvideo" href="/materialien">
+              <Link className="btn btn--onvideo" href="/materialien/vergleich">
                 Materialien vergleichen
               </Link>
             </div>
@@ -109,7 +109,7 @@ export default async function HomePage() {
             <p className="eyebrow">Materialien</p>
             <h2 className="h2">{home.materialsHeadline || 'Materialien'}</h2>
             {home.materialsText && <p>{home.materialsText}</p>}
-            <Link className="more" href="/materialien">
+            <Link className="more" href="/materialien/vergleich">
               Alle {total.length} Materialien vergleichen →
             </Link>
           </div>

@@ -17,7 +17,6 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
-      { source: '/materialien/vergleich', destination: '/materialien', permanent: false },
     ]
   },
   images: {

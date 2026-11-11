@@ -96,6 +96,9 @@ p {
   margin: 0 auto;
   padding-inline: var(--pad);
 }
+.wrap--wide {
+  max-width: 1400px;
+}
 .section {
   padding-block: var(--section);
 }
@@ -987,6 +990,203 @@ a.row:hover .row__name {
 }
 .figure img {
   width: 100%;
+}
+
+/* ---------- Materialvergleich ---------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.compare {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.compare__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+.compare__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.compare__box {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.compare__table {
+  width: 100%;
+  min-width: 1080px;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.compare__table thead th {
+  background: #e4e8ef;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+.compare__table thead th:last-child {
+  padding: 16px 14px;
+}
+.compare__table tbody td,
+.compare__table tbody th {
+  padding: 16px 12px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+.compare__table tbody tr.is-picked > * {
+  background: var(--blue-pale);
+}
+.compare__pick {
+  width: 44px;
+  padding-right: 0 !important;
+}
+.compare__pick input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+.compare__name {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  min-width: 190px;
+  font-weight: 500;
+}
+.compare__name a {
+  color: var(--ink);
+  text-decoration: none;
+  font-family: var(--font-head);
+  font-size: 17px;
+  font-weight: 600;
+}
+.compare__name a span {
+  color: var(--blue);
+}
+.compare__name a:hover {
+  color: var(--blue);
+}
+.compare__sub,
+.duel__sub {
+  display: block;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.compare__text {
+  min-width: 220px;
+  color: var(--text);
+}
+.sortbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 52px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.sortbtn:hover,
+th[aria-sort='ascending'] .sortbtn,
+th[aria-sort='descending'] .sortbtn {
+  color: var(--blue);
+}
+.sortbtn__icon {
+  font-size: 13px;
+  color: var(--muted);
+}
+.bar5 {
+  display: inline-flex;
+  gap: 3px;
+  vertical-align: middle;
+}
+.bar5 span {
+  width: 16px;
+  height: 8px;
+  background: #e1e5ec;
+}
+.bar5 span.on {
+  background: var(--blue);
+}
+.price4 {
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: #c3cad6;
+}
+.price4 span.on {
+  color: var(--ink);
+}
+.duel__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.duel__table th,
+.duel__table td {
+  padding: 12px 16px 12px 0;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  min-width: 150px;
+}
+.duel__table thead th,
+.duel__table thead td {
+  border-top: 0;
+}
+.duel__table thead a {
+  font-family: var(--font-head);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+.duel__table thead a:hover {
+  color: var(--blue);
+}
+.duel__table tbody th {
+  font-weight: 600;
+  color: var(--text);
+  min-width: 140px;
+}
+.duel__best .bar5 span.on {
+  background: var(--ink);
+}
+.duel__text {
+  color: var(--text);
+}
+.legend {
+  margin: 12px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 16px 32px;
+}
+.legend dt {
+  font-weight: 600;
+}
+.legend dd {
+  margin: 2px 0 0;
+  font-size: 15px;
+  color: var(--text);
 }
 
 /* ---------- Preisrechner ---------- */
