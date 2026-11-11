@@ -15,9 +15,9 @@ export const settings = {
   vatId: 'DE286185561',
   priceNote: 'FDM-Teile ab 7,76 € inkl. MwSt., zzgl. Versand. Keine Mindestmenge.',
   social: [
-    { label: 'LinkedIn', url: 'https://www.linkedin.com/company/110453524' },
-    { label: 'Instagram', url: 'https://www.instagram.com/minimo3d' },
-    { label: 'Facebook', url: 'https://www.facebook.com/minimoproduktservice/' },
+    { label: 'LinkedIn', url: 'https://www.linkedin.com/company/minimo3d/' },
+    { label: 'Instagram', url: 'https://www.instagram.com/_minimo3d_/' },
+    { label: 'Facebook', url: 'https://www.facebook.com/minimo3d' },
   ],
   seoDescription:
     '3D-Druck in Neuhausen auf den Fildern bei Stuttgart: Prototypen, Ersatzteile und Kleinserien aus 43 Materialien. FDM, SLA, 3D-Scan und Machbarkeitsanalyse.',

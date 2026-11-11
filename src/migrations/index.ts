@@ -5,6 +5,8 @@ import * as migration_20261111_192748_calculator from './20261111_192748_calcula
 import * as migration_20261111_200000_material_ratings from './20261111_200000_material_ratings';
 import * as migration_20261111_200611_owner_photo from './20261111_200611_owner_photo';
 
+import * as migration_20261111_201000_social_links from './20261111_201000_social_links';
+
 export const migrations = [
   {
     up: migration_20261110_195947_initial.up,
@@ -35,5 +37,10 @@ export const migrations = [
     up: migration_20261111_200611_owner_photo.up,
     down: migration_20261111_200611_owner_photo.down,
     name: '20261111_200611_owner_photo'
+  },
+  {
+    up: migration_20261111_201000_social_links.up,
+    down: migration_20261111_201000_social_links.down,
+    name: '20261111_201000_social_links',
   },
 ];
