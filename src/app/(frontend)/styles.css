@@ -92,12 +92,12 @@ p {
 }
 
 .wrap {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
   padding-inline: var(--pad);
 }
 .wrap--wide {
-  max-width: 1400px;
+  max-width: 1560px;
 }
 .section {
   padding-block: var(--section);
