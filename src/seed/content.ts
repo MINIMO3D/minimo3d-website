@@ -25,6 +25,7 @@ export const settings = {
 export const homepage = {
   eyebrow: '3D-Druck · Neuhausen auf den Fildern bei Stuttgart',
   headline: 'Bauteile, die halten.',
+  heroButtonLabel: 'Sofortangebot',
   text: 'Prototypen, Ersatzteile und Kleinserien aus 43 Materialien. Sie senden uns Ihre Datei, wir prüfen sie und melden uns innerhalb von 24 Stunden mit einem Angebot.',
   stats: [
     { value: 'ab 1 Stück', label: 'keine Mindestmenge' },

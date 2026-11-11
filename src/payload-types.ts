@@ -202,7 +202,7 @@ export interface Service {
 export interface Media {
   id: number;
   /**
-   * Beschreibt das Bild für Suchmaschinen und Screenreader.
+   * Beschreibt das Bild oder Video für Suchmaschinen und Screenreader.
    */
   alt: string;
   updatedAt: string;
@@ -856,7 +856,15 @@ export interface Homepage {
   eyebrow?: string | null;
   headline: string;
   text?: string | null;
+  /**
+   * MP4, am besten 1920 × 1080, ohne Ton, höchstens etwa 5 MB. Leer = mitgeliefertes Video.
+   */
+  heroVideo?: (number | null) | Media;
+  /**
+   * Erscheint, bis das Video geladen ist, und bei ausgeschalteten Animationen.
+   */
   image?: (number | null) | Media;
+  heroButtonLabel?: string | null;
   stats?:
     | {
         value: string;
@@ -935,7 +943,9 @@ export interface HomepageSelect<T extends boolean = true> {
   eyebrow?: T;
   headline?: T;
   text?: T;
+  heroVideo?: T;
   image?: T;
+  heroButtonLabel?: T;
   stats?:
     | T
     | {

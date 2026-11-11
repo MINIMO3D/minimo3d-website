@@ -3,21 +3,21 @@ import path from 'path'
 
 export const Media: CollectionConfig = {
   slug: 'media',
-  labels: { singular: 'Bild', plural: 'Bilder' },
+  labels: { singular: 'Bild oder Video', plural: 'Bilder und Videos' },
   admin: { group: 'Inhalte' },
   access: { read: () => true },
   fields: [
     {
       name: 'alt',
       type: 'text',
-      label: 'Bildbeschreibung (Alt-Text)',
+      label: 'Beschreibung (Alt-Text)',
       required: true,
-      admin: { description: 'Beschreibt das Bild für Suchmaschinen und Screenreader.' },
+      admin: { description: 'Beschreibt das Bild oder Video für Suchmaschinen und Screenreader.' },
     },
   ],
   upload: {
     staticDir: path.resolve(process.cwd(), 'media'),
-    mimeTypes: ['image/*'],
+    mimeTypes: ['image/*', 'video/mp4', 'video/webm'],
     imageSizes: [
       { name: 'card', width: 800 },
       { name: 'wide', width: 1600 },

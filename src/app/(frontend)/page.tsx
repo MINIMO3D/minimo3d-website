@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 import { Faq, InquirySection, MaterialRow, Steps } from '@/components/Blocks'
-import { PartDrawing } from '@/components/PartDrawing'
+import { HeroVideo } from '@/components/HeroVideo'
 import { findAll, getHomepage, getSettings, mediaUrl } from '@/lib/data'
 
 export default async function HomePage() {
@@ -18,23 +18,24 @@ export default async function HomePage() {
   return (
     <>
       <section className="hero">
-        <div className="wrap hero__grid">
-          <div className="hero__text">
+        <div className="hero__banner">
+          <HeroVideo
+            src={(typeof home.heroVideo === 'object' && home.heroVideo?.url) || '/video/hero.mp4'}
+            poster={heroImage || '/video/hero-poster.jpg'}
+          />
+          <div className="wrap hero__content">
             {home.eyebrow && <p className="eyebrow">{home.eyebrow}</p>}
             <h1 className="h1">{home.headline}</h1>
             {home.text && <p className="lead">{home.text}</p>}
             <div className="btns">
               <Link className="btn btn--primary" href="/kontakt#anfrage">
-                Bauteil anfragen
+                {home.heroButtonLabel || 'Sofortangebot'}
               </Link>
-              <Link className="btn btn--ghost" href="/materialien">
+              <Link className="btn btn--onvideo" href="/materialien">
                 Materialien vergleichen
               </Link>
             </div>
-            {s.priceNote && <p className="small muted">{s.priceNote}</p>}
-          </div>
-          <div className="hero__art">
-            {heroImage ? <img src={heroImage} alt={home.image.alt || ''} /> : <PartDrawing />}
+            {s.priceNote && <p className="small hero__note">{s.priceNote}</p>}
           </div>
         </div>
         {home.stats?.length > 0 && (
