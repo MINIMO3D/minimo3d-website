@@ -557,7 +557,7 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
               ))}
             </ul>
             <p className="small muted">
-              Automatische Vorprüfung in der gelieferten Lage des Modells. Vor dem Druck prüfen wir jede Datei von Hand
+              Automatische Vorprüfung in der berechneten Drucklage: Wir drehen das Modell so, dass es möglichst wenig Stützmaterial braucht. Vor dem Druck prüfen wir jede Datei von Hand
               und wählen die beste Drucklage.
             </p>
           </section>

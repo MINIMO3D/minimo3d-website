@@ -1,9 +1,11 @@
 import * as THREE from 'three'
 import { MeshBVH } from 'three-mesh-bvh'
 
+import type { Orientation } from './orient'
+
 export type Metrics = {
   triangles: number
-  /** Abmessungen in mm (X, Y, Z in der gelieferten Lage) */
+  /** Abmessungen in mm (X, Y, Z in der Drucklage) */
   size: [number, number, number]
   volumeCm3: number
   areaCm2: number
@@ -19,6 +21,8 @@ export type Metrics = {
   shells: number | null
   /** Wandstärke aus Stichproben, in mm */
   wall: { p05: number; median: number; below08: number; below12: number; samples: number } | null
+  /** automatisch gewählte Drucklage; fehlt bei älteren Berechnungen (dann gilt die gelieferte Lage) */
+  orientation?: Orientation
 }
 
 export type CheckStatus = 'ok' | 'warn' | 'fail' | 'info'
@@ -272,17 +276,37 @@ export const dfmChecks = (m: Metrics, build: BuildVolume): Check[] => {
       checks.push({ id: 'wall', title: 'Wandstärke', status: 'ok', value, text: 'Die Wände liegen über unserer Empfehlung von mindestens 1,2 mm.' })
   }
 
+  // ---- Drucklage ----
+  const o = m.orientation
+  const lage = o ? 'der berechneten Drucklage' : 'der gelieferten Lage'
+  if (o) {
+    const saved = o.supportBeforeCm3 - m.supportCm3
+    if (!o.changed)
+      checks.push({ id: 'orientation', title: 'Drucklage', status: 'ok', value: 'wie geliefert', text: `Wir haben ${o.candidates} Lagen verglichen. Die gelieferte Lage braucht bereits am wenigsten Stützmaterial.` })
+    else
+      checks.push({
+        id: 'orientation',
+        title: 'Drucklage',
+        status: 'ok',
+        value: 'automatisch gedreht',
+        text:
+          saved >= 0.05
+            ? `Wir haben ${o.candidates} Lagen verglichen und das Teil so gedreht, dass es am wenigsten Stützmaterial braucht: etwa ${num(m.supportCm3)} statt ${num(o.supportBeforeCm3)} cm³. Die 3D-Ansicht und die Maße zeigen diese Lage.`
+            : `Wir haben ${o.candidates} Lagen verglichen und das Teil auf seine größte ebene Fläche gelegt. So liegt es stabil und druckt in geringerer Höhe. Die 3D-Ansicht und die Maße zeigen diese Lage.`,
+      })
+  }
+
   const overhangShare = m.areaCm2 > 0 ? m.overhangCm2 / m.areaCm2 : 0
   if (m.overhangCm2 < 0.05)
-    checks.push({ id: 'overhang', title: 'Überhänge', status: 'ok', value: 'keine', text: 'In der gelieferten Lage sind keine Stützstrukturen nötig.' })
+    checks.push({ id: 'overhang', title: 'Überhänge', status: 'ok', value: 'keine', text: `In ${lage} sind keine Stützstrukturen nötig.` })
   else if (overhangShare < 0.12)
-    checks.push({ id: 'overhang', title: 'Überhänge', status: 'info', value: `${num(m.overhangCm2)} cm² über 45°`, text: `Einige Flächen brauchen Stützstrukturen (etwa ${num(m.supportCm3)} cm³). Die gestützten Flächen sind etwas rauer. Wir wählen die Drucklage so, dass möglichst wenig gestützt wird.` })
+    checks.push({ id: 'overhang', title: 'Überhänge', status: 'info', value: `${num(m.overhangCm2)} cm² über 45°`, text: `Einige Flächen brauchen Stützstrukturen (etwa ${num(m.supportCm3)} cm³). Die gestützten Flächen sind etwas rauer.${o ? ' Eine Lage mit weniger Stützmaterial haben wir nicht gefunden.' : ' Wir wählen die Drucklage so, dass möglichst wenig gestützt wird.'}` })
   else
-    checks.push({ id: 'overhang', title: 'Überhänge', status: 'warn', value: `${num(m.overhangCm2)} cm² über 45°`, text: `Ein großer Teil der Oberfläche hängt über (etwa ${num(m.supportCm3)} cm³ Stützmaterial). Eine andere Drucklage, Fasen oder eine Teilung können Material und Nacharbeit sparen. Wir prüfen die beste Lage vor dem Druck.` })
+    checks.push({ id: 'overhang', title: 'Überhänge', status: 'warn', value: `${num(m.overhangCm2)} cm² über 45°`, text: `Ein großer Teil der Oberfläche hängt über (etwa ${num(m.supportCm3)} cm³ Stützmaterial). ${o ? 'Das ist bereits die günstigste Lage, die wir gefunden haben. Fasen oder eine Teilung' : 'Eine andere Drucklage, Fasen oder eine Teilung'} können Material und Nacharbeit sparen. Wir prüfen die Lage vor dem Druck von Hand.` })
 
   const footprint = (x * y) / 100
   if (m.contactCm2 < 0.2 || (footprint > 0 && m.contactCm2 / footprint < 0.03))
-    checks.push({ id: 'contact', title: 'Auflagefläche', status: 'warn', value: `${num(m.contactCm2)} cm²`, text: 'In der gelieferten Lage liegt das Teil kaum flach auf dem Druckbett. Wir drehen es vor dem Druck in eine stabile Lage oder stützen es ab.' })
+    checks.push({ id: 'contact', title: 'Auflagefläche', status: 'warn', value: `${num(m.contactCm2)} cm²`, text: `In ${lage} liegt das Teil kaum flach auf dem Druckbett. Wir stützen es ab oder wählen vor dem Druck von Hand eine stabilere Lage.` })
   else
     checks.push({ id: 'contact', title: 'Auflagefläche', status: 'ok', value: `${num(m.contactCm2)} cm²`, text: 'Das Teil hat eine ebene Auflagefläche und haftet gut auf dem Druckbett.' })
 

@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   const buf = Buffer.from(await file.arrayBuffer())
   let analysis
   try {
-    analysis = await analyzeFile(buf, file.name)
+    analysis = await analyzeFile(buf, file.name, { x: setup.config.buildX, y: setup.config.buildY, z: setup.config.buildZ })
   } catch (err) {
     if (err instanceof ModelError) return bad(err.message, 422)
     console.error('Analyse fehlgeschlagen', err)

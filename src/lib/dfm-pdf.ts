@@ -210,7 +210,7 @@ export const buildDfmPdf = async (input: DfmPdfInput): Promise<Uint8Array> => {
 
   // Hinweis
   const note =
-    'Diese Analyse wurde automatisch aus der hochgeladenen Datei erstellt und bezieht sich auf die gelieferte Lage des Modells. ' +
+    'Diese Analyse wurde automatisch aus der hochgeladenen Datei erstellt und bezieht sich auf die automatisch berechnete Drucklage mit dem wenigsten Stützmaterial. ' +
     'Wandstärken und Stützmaterial sind Näherungen aus Stichproben. Vor dem Druck prüfen wir jede Datei von Hand, wählen die Drucklage und melden uns, falls etwas angepasst werden sollte. ' +
     'Der genannte Preis gilt für die gewählte Ausführung zum Zeitpunkt der Erstellung.'
   const noteLines = wrap(note, regular, 8, CW)

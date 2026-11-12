@@ -4,6 +4,7 @@ import path from 'path'
 import { getPayload } from 'payload'
 
 import { analyzeMesh, type Metrics } from './mesh/analyze'
+import { applyOrientation, findOrientation, type Orientation } from './mesh/orient'
 import { parseModel, previewMesh } from './mesh/parse'
 import { mergeConfig, type CalcConfig } from './pricing'
 
@@ -72,13 +73,40 @@ export const loadPreview = async (quote: any): Promise<Float32Array | null> => {
   const filename = typeof quote.file === 'object' ? quote.file?.filename : null
   if (!filename) return null
   const mesh = await parseModel(await fs.readFile(quoteFilePath(filename)), quote.fileName)
-  rememberPreview(quote.token, mesh.positions)
+  // dieselbe Drucklage wie bei der Auswertung zeigen
+  rememberPreview(quote.token, applyOrientation(mesh.positions, quote.metrics?.orientation?.matrix))
   return previews.get(quote.token) || null
 }
 
-export const analyzeFile = async (buf: Buffer, name: string) => {
-  const mesh = await parseModel(buf, name)
-  return { mesh, metrics: analyzeMesh(mesh.positions) }
+/** Liest die Datei, dreht das Modell in die Drucklage mit dem wenigsten Stützmaterial und wertet es in dieser Lage aus. */
+export const analyzeFile = async (buf: Buffer, name: string, build?: { x: number; y: number; z: number }) => {
+  const parsed = await parseModel(buf, name)
+  let orientation: Orientation | undefined
+  let positions = parsed.positions
+  try {
+    // Volumen grob aus dem Hüllquader: dient nur als Toleranz beim Vergleich der Lagen
+    orientation = findOrientation(positions, boxVolume(positions) * 0.3, build)
+    positions = applyOrientation(positions, orientation.matrix)
+  } catch (err) {
+    console.error('Drucklage konnte nicht bestimmt werden', err)
+    orientation = undefined
+    positions = parsed.positions
+  }
+  const metrics = analyzeMesh(positions)
+  if (orientation)
+    metrics.orientation = { ...orientation, supportBeforeCm3: Math.min(orientation.supportBeforeCm3, metrics.volumeCm3), supportCm3: metrics.supportCm3 }
+  return { mesh: { positions }, metrics }
+}
+
+const boxVolume = (p: Float32Array) => {
+  const min = [Infinity, Infinity, Infinity]
+  const max = [-Infinity, -Infinity, -Infinity]
+  for (let i = 0; i < p.length; i += 3)
+    for (let k = 0; k < 3; k++) {
+      if (p[i + k] < min[k]) min[k] = p[i + k]
+      if (p[i + k] > max[k]) max[k] = p[i + k]
+    }
+  return Math.max(0, (max[0] - min[0]) * (max[1] - min[1]) * (max[2] - min[2]))
 }
 
 /** Berechnungen ohne Bestellung nach 7 Tagen samt Datei löschen. */
