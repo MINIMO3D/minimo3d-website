@@ -2061,3 +2061,88 @@ a.tile:hover {
 .calc__side {
   scroll-margin-top: 96px;
 }
+
+/* Mehrere Bauteile */
+.calc__add {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+label.btn {
+  cursor: pointer;
+  position: relative;
+}
+label.btn:focus-within {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.btn--busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.partlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 8px;
+}
+.partlist--over {
+  outline: 2px dashed var(--blue);
+  outline-offset: 4px;
+}
+.partlist__item {
+  display: flex;
+  align-items: center;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--surface);
+}
+.partlist__item > div,
+.partlist__pick {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.partlist__pick {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  min-height: 44px;
+  justify-content: center;
+}
+.partlist__item--on {
+  border-color: var(--blue);
+  box-shadow: inset 3px 0 0 var(--blue);
+  background: var(--blue-pale);
+}
+.partlist__name {
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.partlist__price {
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+.partlist__warn {
+  color: #b3261e;
+  font-weight: 600;
+}

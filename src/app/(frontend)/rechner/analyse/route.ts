@@ -15,9 +15,9 @@ export const maxDuration = 120
 const MAX_SIZE = 50 * 1024 * 1024
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 
-// Einfache Bremse gegen Missbrauch: höchstens 20 Dateien in 10 Minuten je Besucher.
+// Einfache Bremse gegen Missbrauch: höchstens 60 Dateien in 10 Minuten je Besucher.
 const WINDOW_MS = 10 * 60 * 1000
-const LIMIT = 20
+const LIMIT = 60
 const hits = new Map<string, number[]>()
 const tooMany = (req: Request) => {
   const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unbekannt'

@@ -490,6 +490,23 @@ export interface Order {
   customerEmail?: string | null;
   customerPhone?: string | null;
   address?: string | null;
+  /**
+   * Alle Bauteile dieser Bestellung mit Datei und Ausführung.
+   */
+  items?:
+    | {
+        fileName?: string | null;
+        file?: (number | null) | QuoteFile;
+        materialName?: string | null;
+        color?: string | null;
+        layer?: string | null;
+        infill?: string | null;
+        quantity?: number | null;
+        unitPrice?: number | null;
+        lineTotal?: number | null;
+        id?: string | null;
+      }[]
+    | null;
   fileName?: string | null;
   file?: (number | null) | QuoteFile;
   materialName?: string | null;
@@ -1046,6 +1063,20 @@ export interface OrdersSelect<T extends boolean = true> {
   customerEmail?: T;
   customerPhone?: T;
   address?: T;
+  items?:
+    | T
+    | {
+        fileName?: T;
+        file?: T;
+        materialName?: T;
+        color?: T;
+        layer?: T;
+        infill?: T;
+        quantity?: T;
+        unitPrice?: T;
+        lineTotal?: T;
+        id?: T;
+      };
   fileName?: T;
   file?: T;
   materialName?: T;

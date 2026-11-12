@@ -9,6 +9,7 @@ import * as migration_20261111_202000_legal_texts from './20261111_202000_legal_
 import * as migration_20261111_203820_customers from './20261111_203820_customers';
 import * as migration_20261111_204500_legal_accounts from './20261111_204500_legal_accounts';
 import * as migration_20261111_212500_legal_checkout from './20261111_212500_legal_checkout';
+import * as migration_20261112_173348_order_items from './20261112_173348_order_items';
 
 export const migrations = [
   {
@@ -54,7 +55,7 @@ export const migrations = [
   {
     up: migration_20261111_203820_customers.up,
     down: migration_20261111_203820_customers.down,
-    name: '20261111_203820_customers'
+    name: '20261111_203820_customers',
   },
   {
     up: migration_20261111_204500_legal_accounts.up,
@@ -65,5 +66,10 @@ export const migrations = [
     up: migration_20261111_212500_legal_checkout.up,
     down: migration_20261111_212500_legal_checkout.down,
     name: '20261111_212500_legal_checkout',
+  },
+  {
+    up: migration_20261112_173348_order_items.up,
+    down: migration_20261112_173348_order_items.down,
+    name: '20261112_173348_order_items'
   },
 ];

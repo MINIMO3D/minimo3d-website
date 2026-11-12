@@ -68,8 +68,9 @@ export const markOrderPaid = async (session: Stripe.Checkout.Session, origin = p
       stripePaymentIntent: typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id,
     } as any,
   })
-  if (order.breakdown?.quoteId)
-    await payload.update({ collection: 'quotes', id: order.breakdown.quoteId, data: { ordered: true } as any }).catch(() => null)
+  const quoteIds: unknown[] = Array.isArray(order.breakdown?.items) ? order.breakdown.items.map((i: any) => i?.quoteId) : [order.breakdown?.quoteId]
+  for (const id of quoteIds)
+    if (id) await payload.update({ collection: 'quotes', id: id as number, data: { ordered: true } as any }).catch(() => null)
   payload.logger.info(`Bestellung ${order.orderNumber} bezahlt.`)
   await sendOrderMails(payload, updated, origin)
   return updated

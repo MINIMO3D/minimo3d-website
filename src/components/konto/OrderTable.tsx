@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+import { orderItems, orderSummary } from '@/lib/order-items'
 import { dateDe, ORDER_STATUS } from '@/lib/portal'
 import { euro, netCents } from '@/lib/pricing'
 
@@ -32,9 +33,9 @@ export function OrderTable({ orders, b2b }: { orders: any[]; b2b: boolean }) {
                 </td>
                 <td>{dateDe(o.createdAt)}</td>
                 <td>
-                  {o.quantity} × {o.fileName}
+                  {orderSummary(o)}
                   <br />
-                  <span className="small muted">{o.materialName}</span>
+                  <span className="small muted">{[...new Set(orderItems(o).map((i) => i.materialName))].join(', ')}</span>
                 </td>
                 {b2b && <td>{[o.poNumber, o.costCentre].filter(Boolean).join(' · ') || '–'}</td>}
                 <td>

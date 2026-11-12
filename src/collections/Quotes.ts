@@ -96,8 +96,42 @@ export const Orders: CollectionConfig = {
       ],
     },
     { name: 'address', type: 'textarea', label: 'Liefer- oder Rechnungsadresse' },
-    { name: 'fileName', type: 'text', label: 'Dateiname', admin: { readOnly: true } },
-    { name: 'file', type: 'relationship', relationTo: 'quote-files', label: '3D-Datei' },
+    {
+      name: 'items',
+      type: 'array',
+      label: 'Bauteile',
+      labels: { singular: 'Bauteil', plural: 'Bauteile' },
+      admin: { description: 'Alle Bauteile dieser Bestellung mit Datei und Ausführung.', initCollapsed: false },
+      fields: [
+        {
+          type: 'row',
+          fields: [
+            { name: 'fileName', type: 'text', label: 'Dateiname', admin: { readOnly: true } },
+            { name: 'file', type: 'relationship', relationTo: 'quote-files', label: '3D-Datei' },
+          ],
+        },
+        {
+          type: 'row',
+          fields: [
+            { name: 'materialName', type: 'text', label: 'Material', admin: { readOnly: true } },
+            { name: 'color', type: 'text', label: 'Farbe' },
+            { name: 'layer', type: 'text', label: 'Schichthöhe', admin: { readOnly: true } },
+            { name: 'infill', type: 'text', label: 'Füllung', admin: { readOnly: true } },
+          ],
+        },
+        {
+          type: 'row',
+          fields: [
+            { name: 'quantity', type: 'number', label: 'Stückzahl', admin: { readOnly: true } },
+            { name: 'unitPrice', type: 'number', label: 'Stückpreis (€, brutto)', admin: { readOnly: true } },
+            { name: 'lineTotal', type: 'number', label: 'Summe (€, brutto)', admin: { readOnly: true } },
+          ],
+        },
+      ],
+    },
+    // Kurzfassung für Listen; bei mehreren Bauteilen stehen die Einzelheiten oben unter „Bauteile“
+    { name: 'fileName', type: 'text', label: 'Bauteile (Kurzfassung)', admin: { readOnly: true } },
+    { name: 'file', type: 'relationship', relationTo: 'quote-files', label: '3D-Datei (erstes Bauteil)' },
     {
       type: 'row',
       fields: [

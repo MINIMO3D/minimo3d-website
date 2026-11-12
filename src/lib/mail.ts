@@ -1,5 +1,7 @@
 import type { Payload } from 'payload'
 
+import { orderItems } from './order-items'
+
 export const mailEnabled = () => Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)
 
 const esc = (s: unknown) =>
@@ -36,7 +38,7 @@ const rows = (items: [string, unknown][]) =>
     .filter(([, v]) => v !== undefined && v !== null && v !== '')
     .map(
       ([k, v]) =>
-        `<tr><td style="padding:6px 12px 6px 0;color:#55607a;vertical-align:top;width:42%">${esc(k)}</td><td style="padding:6px 0;color:#0e1726;font-weight:bold">${esc(v)}</td></tr>`,
+        `<tr><td style="padding:6px 12px 6px 0;color:#55607a;vertical-align:top;width:42%">${esc(k)}</td><td style="padding:6px 0;color:#0e1726;font-weight:bold;white-space:pre-line">${esc(v)}</td></tr>`,
     )
     .join('')}</table>`
 
@@ -64,11 +66,10 @@ const euro = (n: number) => n.toLocaleString('de-DE', { style: 'currency', curre
 
 const orderRows = (o: any): [string, unknown][] => [
   ['Bestellnummer', o.orderNumber],
-  ['Datei', o.fileName],
-  ['Material', [o.materialName, o.color].filter(Boolean).join(', ')],
-  ['Schichthöhe', o.layer],
-  ['Füllung', o.infill],
-  ['Stückzahl', o.quantity],
+  ...orderItems(o).map((it, n, all): [string, unknown] => [
+    all.length > 1 ? `Bauteil ${n + 1}` : 'Bauteil',
+    `${it.quantity} × ${it.fileName}\n${[it.materialName, it.color].filter(Boolean).join(', ')}\nSchichthöhe ${it.layer}, Füllung ${it.infill}${it.partsCents ? `\n${euro(it.partsCents / 100)}` : ''}`,
+  ]),
   ['Express', o.express ? 'ja' : ''],
   ['Lieferung', o.delivery],
   ['Lieferzeit', o.leadTime],

@@ -3,8 +3,8 @@ import { randomBytes } from 'crypto'
 import { NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 
-import { resolveSelection } from '@/lib/calc-selection'
-import { findQuote, mayUseQuote, siteOrigin } from '@/lib/calc-server'
+import { resolveOrder } from '@/lib/calc-selection'
+import { siteOrigin } from '@/lib/calc-server'
 import { billingText, countryName, fullName, parseContact, shippingOf, shippingText, type Contact } from '@/lib/contact'
 import { customerFromRequest, customerName, formatAddress, hasBilling, isB2B } from '@/lib/customer'
 import { sendOrderMails } from '@/lib/mail'
@@ -23,12 +23,15 @@ export async function POST(req: Request) {
   if (body.accepted !== true) return bad('Bitte bestätigen Sie AGB und Datenschutzerklärung.')
 
   const customer = await customerFromRequest(req)
-  const quote = await findQuote(body.token)
-  if (!quote || !mayUseQuote(quote, customer)) return bad('Die Berechnung ist abgelaufen. Bitte laden Sie die Datei erneut hoch.', 404)
-
-  const sel = await resolveSelection(quote, body, customer)
-  if ('error' in sel) return bad(sel.error)
-  if (!sel.fits) return bad('Das Teil ist größer als der Bauraum. Bitte senden Sie uns dafür eine Anfrage.')
+  const sel = await resolveOrder(body, customer)
+  if ('error' in sel) return bad(sel.error, sel.status)
+  const { items } = sel
+  const first = items[0]
+  const single = items.length === 1
+  const fileIdOf = (q: any) => (typeof q.file === 'object' ? q.file?.id : q.file)
+  const layerText = (i: (typeof items)[number]) => `${i.layer.label} (${comma(i.layer.mm)} mm)`
+  const infillText = (i: (typeof items)[number]) => `${i.infill.label} (${i.infill.range})`
+  const same = (pick: (i: (typeof items)[number]) => string) => (items.every((i) => pick(i) === pick(first)) ? pick(first) : 'je Bauteil verschieden')
 
   // Kauf auf Rechnung: nur für freigeschaltete Geschäftskunden mit hinterlegter Adresse
   const onInvoice = body.payment === 'rechnung'
@@ -87,13 +90,25 @@ export async function POST(req: Request) {
             .filter(Boolean)
             .join('\n\n')
         : [`Rechnung:\n${billingText(contact!)}`, sel.delivery === 'versand' ? `Lieferung:\n${shippingText(contact!)}` : ''].filter(Boolean).join('\n\n'),
-      fileName: quote.fileName,
-      file: typeof quote.file === 'object' ? quote.file?.id : quote.file,
-      materialName: sel.material.name,
-      color: sel.color || undefined,
-      layer: `${sel.layer.label} (${comma(sel.layer.mm)} mm)`,
-      infill: `${sel.infill.label} (${sel.infill.range})`,
-      quantity: sel.quantity,
+      items: items.map((i) => ({
+        fileName: i.quote.fileName,
+        file: fileIdOf(i.quote),
+        materialName: i.material.name,
+        color: i.color || undefined,
+        layer: layerText(i),
+        infill: infillText(i),
+        quantity: i.quantity,
+        unitPrice: i.line.unitCents / 100,
+        lineTotal: i.line.partsCents / 100,
+      })),
+      // Kurzfassung in den bisherigen Feldern (Listen im Admin-Bereich, ältere Auswertungen)
+      fileName: (single ? first.quote.fileName : `${items.length} Bauteile: ${items.map((i) => i.quote.fileName).join(', ')}`).slice(0, 250),
+      file: fileIdOf(first.quote),
+      materialName: same((i) => i.material.name),
+      color: single ? first.color || undefined : undefined,
+      layer: same(layerText),
+      infill: same(infillText),
+      quantity: items.reduce((sum, i) => sum + i.quantity, 0),
       express: sel.express,
       delivery: deliveryLabel,
       leadTime: price.leadTime,
@@ -101,13 +116,18 @@ export async function POST(req: Request) {
       poNumber: poNumber || undefined,
       costCentre: costCentre || undefined,
       breakdown: {
-        quoteId: quote.id,
-        token: quote.token,
-        materialId: sel.material.id,
-        layerId: sel.layer.id,
-        infillId: sel.infill.id,
+        items: items.map((i) => ({
+          quoteId: i.quote.id,
+          token: i.quote.token,
+          materialId: i.material.id,
+          layerId: i.layer.id,
+          infillId: i.infill.id,
+          discountPercent: i.line.discountPercent,
+          gramsPerPart: Math.round(i.line.gramsPerPart * 10) / 10,
+          hoursPerPart: Math.round(i.line.hoursPerPart * 100) / 100,
+          metrics: i.quote.metrics,
+        })),
         price,
-        metrics: quote.metrics,
         vatId: contact?.vatId || (b2b ? customer?.vatId : undefined),
         contact: contact || undefined,
         invoiceDays: onInvoice ? (customer!.invoiceDays ?? 14) : undefined,
@@ -131,25 +151,25 @@ export async function POST(req: Request) {
 
   // ---- Kauf auf Rechnung: Bestellung ist damit angenommen ----
   if (onInvoice) {
-    await payload.update({ collection: 'quotes', id: quote.id, data: { ordered: true } as any }).catch(() => null)
+    for (const i of items) await payload.update({ collection: 'quotes', id: i.quote.id, data: { ordered: true } as any }).catch(() => null)
     await sendOrderMails(payload, order, origin)
     payload.logger.info(`Bestellung ${orderNumber} auf Rechnung.`)
     return NextResponse.json({ url: `/konto/bestellungen/${order.id}?neu=1` })
   }
 
   // ---- Online-Zahlung über Stripe ----
-  const partName = `3D-Druck: ${quote.fileName}`.slice(0, 120)
-  const partDesc = [
-    sel.material.name,
-    sel.color,
-    `Schichthöhe ${comma(sel.layer.mm)} mm`,
-    `Füllung ${sel.infill.label}`,
-    price.discountPercent ? `${comma(price.discountPercent)} % Mengenrabatt` : '',
-    price.customerDiscountPercent ? `${comma(price.customerDiscountPercent)} % Kundenrabatt` : '',
-    'inkl. 19 % MwSt.',
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  const partDesc = (i: (typeof items)[number]) =>
+    [
+      i.material.name,
+      i.color,
+      `Schichthöhe ${comma(i.layer.mm)} mm`,
+      `Füllung ${i.infill.label}`,
+      i.line.discountPercent ? `${comma(i.line.discountPercent)} % Mengenrabatt` : '',
+      price.customerDiscountPercent ? `${comma(price.customerDiscountPercent)} % Kundenrabatt` : '',
+      'inkl. 19 % MwSt.',
+    ]
+      .filter(Boolean)
+      .join(' · ')
 
   const line = (name: string, amount: number, quantity = 1, description?: string) => ({
     quantity,
@@ -181,7 +201,7 @@ export async function POST(req: Request) {
       mode: 'payment',
       locale: 'de',
       line_items: [
-        line(partName, price.unitCents, sel.quantity, partDesc),
+        ...items.map((i) => line(`3D-Druck: ${i.quote.fileName}`.slice(0, 120), i.line.unitCents, i.quantity, partDesc(i))),
         line('Auftragspauschale', price.feeCents, 1, 'Prüfung, Abwicklung und Verpackung'),
         ...(price.expressCents ? [line('Express-Fertigung', price.expressCents)] : []),
       ],

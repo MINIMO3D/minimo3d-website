@@ -110,48 +110,80 @@ const LEAD_EXPRESS: [number, string][] = [[24, '1–2'], [60, '2–4'], [100, '4
 
 export const clampQuantity = (q: number) => Math.min(500, Math.max(1, Math.round(Number.isFinite(q) ? q : 1)))
 
-export const calculatePrice = (input: PriceInput, cfg: CalcConfig): PriceResult => {
-  const layer = LAYERS.find((l) => l.id === input.layer) || LAYERS[1]
-  const infill = INFILLS.find((i) => i.id === input.infill) || INFILLS[1]
-  const qty = clampQuantity(input.quantity)
-  const g = input.geometry
+export type OrderItemInput = { geometry: PriceGeometry; material: PriceMaterial; layer: LayerId; infill: InfillId; quantity: number }
+export type OrderOptions = { express: boolean; delivery: DeliveryId; customerDiscountPercent?: number }
+/** Eine Position (ein Bauteil mit Ausführung und Stückzahl). Beträge in Cent, brutto. */
+export type OrderLine = { gramsPerPart: number; hoursPerPart: number; discountPercent: number; unitCents: number; partsCents: number }
+export type OrderPrice = {
+  lines: OrderLine[]
+  customerDiscountPercent: number
+  /** Summe aller Positionen */
+  partsCents: number
+  feeCents: number
+  expressCents: number
+  shippingCents: number
+  totalCents: number
+  vatCents: number
+  leadTime: string
+}
 
-  // Material: Außenhaut voll, Kern nach Füllgrad, dazu Stützen
-  const shell = Math.min(g.volumeCm3, g.areaCm2 * (cfg.wallMm / 10))
-  const printedCm3 = shell + Math.max(0, g.volumeCm3 - shell) * infill.fraction + g.supportCm3
-  const grams = printedCm3 * input.material.density
+export const MAX_PARTS = 20
 
-  // Zeit: Materialdurchsatz der Düse plus fester Anteil je Schicht
-  const flowCm3h = cfg.lineWidthMm * layer.mm * cfg.speedMmS * 3.6
-  const layers = g.heightMm / layer.mm
-  const hours = (printedCm3 / flowCm3h) * (input.material.timeFactor || 1) + (layers * cfg.secondsPerLayer) / 3600 + 0.05
-
-  // Preisfaktor: Aufschlag für Materialien, die mehr Rüstaufwand, Trocknung und Ausschuss bedeuten
-  const partNet = ((grams / 1000) * input.material.pricePerKg + hours * cfg.machineRate) * (input.material.priceFactor || 1)
-  const discountPercent = qty >= 25 ? cfg.discount25 : qty >= 10 ? cfg.discount10 : qty >= 5 ? cfg.discount5 : 0
+/** Preis einer Bestellung mit einem oder mehreren Bauteilen. Auftragspauschale, Express und Versand fallen je Bestellung einmal an. */
+export const calculateOrder = (items: OrderItemInput[], options: OrderOptions, cfg: CalcConfig): OrderPrice => {
   const vat = 1 + cfg.vatPercent / 100
+  const customerDiscountPercent = Math.min(50, Math.max(0, options.customerDiscountPercent || 0))
+  let totalHours = 0
 
-  // Der Mindestpreis gilt für die ganze Position, nicht je Stück
-  const customerDiscountPercent = Math.min(50, Math.max(0, input.customerDiscountPercent || 0))
-  const lineNet = Math.max(cfg.minPartNet, partNet * (1 - discountPercent / 100) * (1 - customerDiscountPercent / 100) * qty)
-  const unitCents = Math.round((lineNet / qty) * vat * 100)
-  const partsCents = unitCents * qty
+  const lines = items.map((item): OrderLine => {
+    const layer = LAYERS.find((l) => l.id === item.layer) || LAYERS[1]
+    const infill = INFILLS.find((i) => i.id === item.infill) || INFILLS[1]
+    const qty = clampQuantity(item.quantity)
+    const g = item.geometry
+
+    // Material: Außenhaut voll, Kern nach Füllgrad, dazu Stützen
+    const shell = Math.min(g.volumeCm3, g.areaCm2 * (cfg.wallMm / 10))
+    const printedCm3 = shell + Math.max(0, g.volumeCm3 - shell) * infill.fraction + g.supportCm3
+    const grams = printedCm3 * item.material.density
+
+    // Zeit: Materialdurchsatz der Düse plus fester Anteil je Schicht
+    const flowCm3h = cfg.lineWidthMm * layer.mm * cfg.speedMmS * 3.6
+    const layers = g.heightMm / layer.mm
+    const hours = (printedCm3 / flowCm3h) * (item.material.timeFactor || 1) + (layers * cfg.secondsPerLayer) / 3600 + 0.05
+
+    // Preisfaktor: Aufschlag für Materialien, die mehr Rüstaufwand, Trocknung und Ausschuss bedeuten
+    const partNet = ((grams / 1000) * item.material.pricePerKg + hours * cfg.machineRate) * (item.material.priceFactor || 1)
+    const discountPercent = qty >= 25 ? cfg.discount25 : qty >= 10 ? cfg.discount10 : qty >= 5 ? cfg.discount5 : 0
+
+    // Der Mindestpreis gilt für die ganze Position, nicht je Stück
+    const lineNet = Math.max(cfg.minPartNet, partNet * (1 - discountPercent / 100) * (1 - customerDiscountPercent / 100) * qty)
+    const unitCents = Math.round((lineNet / qty) * vat * 100)
+    totalHours += hours * qty
+    return { gramsPerPart: grams, hoursPerPart: hours, discountPercent, unitCents, partsCents: unitCents * qty }
+  })
+
+  const partsCents = lines.reduce((sum, l) => sum + l.partsCents, 0)
   const feeCents = Math.round(cfg.orderFeeGross * 100)
   const goods = partsCents + feeCents
-  const expressCents = input.express ? Math.max(Math.round(cfg.expressMinGross * 100), Math.round((goods * cfg.expressPercent) / 100)) : 0
+  const expressCents = options.express ? Math.max(Math.round(cfg.expressMinGross * 100), Math.round((goods * cfg.expressPercent) / 100)) : 0
   const shippingCents =
-    input.delivery === 'versand' && goods + expressCents < Math.round(cfg.freeShippingFromGross * 100)
+    options.delivery === 'versand' && goods + expressCents < Math.round(cfg.freeShippingFromGross * 100)
       ? Math.round(cfg.shippingGross * 100)
       : 0
   const totalCents = goods + expressCents + shippingCents
   const vatCents = Math.round(totalCents - totalCents / vat)
 
-  const totalHours = hours * qty
-  const table = input.express ? LEAD_EXPRESS : LEAD_STANDARD
+  const table = options.express ? LEAD_EXPRESS : LEAD_STANDARD
   const tier = table.find(([limit]) => totalHours <= limit)
   const leadTime = tier ? `${tier[1]} Werktage` : 'nach Absprache'
 
-  return { gramsPerPart: grams, hoursPerPart: hours, discountPercent, customerDiscountPercent, unitCents, partsCents, feeCents, expressCents, shippingCents, totalCents, vatCents, leadTime }
+  return { lines, customerDiscountPercent, partsCents, feeCents, expressCents, shippingCents, totalCents, vatCents, leadTime }
+}
+
+/** Preis für ein einzelnes Bauteil (Fertigungsanalyse, Staffelpreise). */
+export const calculatePrice = (input: PriceInput, cfg: CalcConfig): PriceResult => {
+  const { lines, ...order } = calculateOrder([input], input, cfg)
+  return { ...lines[0], ...order }
 }
 
 export const euro = (cents: number) => (cents / 100).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })

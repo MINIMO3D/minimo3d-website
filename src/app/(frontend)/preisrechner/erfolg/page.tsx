@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { getSettings, telHref } from '@/lib/data'
 import { euro } from '@/lib/pricing'
 import { originOf } from '@/lib/mail'
+import { orderItems } from '@/lib/order-items'
 import { getStripe, markOrderPaid } from '@/lib/stripe'
 
 export const metadata: Metadata = { title: 'Bestellung', robots: { index: false } }
@@ -39,17 +40,14 @@ export default async function OrderDonePage({ searchParams }: Props) {
             unserem Zahlungsdienst Stripe.
           </p>
           <dl className="sum" style={{ maxWidth: 520 }}>
-            <div>
-              <dt>Datei</dt>
-              <dd>{order.fileName}</dd>
-            </div>
-            <div>
-              <dt>Ausführung</dt>
-              <dd>
-                {order.quantity} × {order.materialName}
-                {order.color ? `, ${order.color}` : ''}
-              </dd>
-            </div>
+            {orderItems(order).map((it, n) => (
+              <div key={n}>
+                <dt>
+                  {it.quantity} × {it.fileName}
+                </dt>
+                <dd>{[it.materialName, it.color].filter(Boolean).join(', ')}</dd>
+              </div>
+            ))}
             <div>
               <dt>Lieferung</dt>
               <dd>{order.delivery}</dd>

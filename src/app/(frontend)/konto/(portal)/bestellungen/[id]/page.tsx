@@ -5,6 +5,7 @@ import { DfmButton } from '@/components/konto/Forms'
 import { StatusBadge } from '@/components/konto/OrderTable'
 import { requireCustomer, isB2B } from '@/lib/customer'
 import { getSettings } from '@/lib/data'
+import { orderItems } from '@/lib/order-items'
 import { dateDe, getOrder, ORDER_STATUS, ORDER_STEPS, reorderHref } from '@/lib/portal'
 import { euro, netCents } from '@/lib/pricing'
 
@@ -22,6 +23,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
   const step = ORDER_STATUS[o.status]?.step ?? 0
   const invoice = o.paymentMethod === 'rechnung'
   const again = reorderHref(o)
+  const items = orderItems(o)
 
   return (
     <div className="stack" style={{ gap: 28 }}>
@@ -51,28 +53,36 @@ export default async function OrderPage({ params, searchParams }: Props) {
 
       <div className="split">
         <section className="panel">
-          <h2 className="h3">Bauteil</h2>
+          <h2 className="h3">{items.length > 1 ? `${items.length} Bauteile` : 'Bauteil'}</h2>
+          <ul className="partlist">
+            {items.map((it, n) => (
+              <li key={n} className="partlist__item">
+                <div>
+                  <p className="partlist__name">
+                    {it.quantity} × {it.fileName}
+                  </p>
+                  <p className="small muted">
+                    {[it.materialName, it.color].filter(Boolean).join(', ')} · Schichthöhe {it.layer} · Füllung {it.infill}
+                  </p>
+                  {it.token && it.materialId && (
+                    <DfmButton
+                      selection={{
+                        token: it.token,
+                        materialId: it.materialId,
+                        layer: it.layerId || 'standard',
+                        infill: it.infillId || 'standard',
+                        quantity: it.quantity,
+                        color: it.color,
+                        fileName: it.fileName,
+                      }}
+                    />
+                  )}
+                </div>
+                {it.partsCents > 0 && <p className="partlist__price">{show(it.partsCents)}</p>}
+              </li>
+            ))}
+          </ul>
           <dl className="sum">
-            <div>
-              <dt>Datei</dt>
-              <dd>{o.fileName}</dd>
-            </div>
-            <div>
-              <dt>Material</dt>
-              <dd>{[o.materialName, o.color].filter(Boolean).join(', ')}</dd>
-            </div>
-            <div>
-              <dt>Schichthöhe</dt>
-              <dd>{o.layer}</dd>
-            </div>
-            <div>
-              <dt>Füllung</dt>
-              <dd>{o.infill}</dd>
-            </div>
-            <div>
-              <dt>Stückzahl</dt>
-              <dd>{o.quantity}</dd>
-            </div>
             <div>
               <dt>Lieferung</dt>
               <dd>{o.delivery}</dd>
@@ -110,19 +120,6 @@ export default async function OrderPage({ params, searchParams }: Props) {
                 Erneut bestellen
               </Link>
             )}
-            {b.token && b.materialId && (
-              <DfmButton
-                selection={{
-                  token: b.token,
-                  materialId: String(b.materialId),
-                  layer: b.layerId,
-                  infill: b.infillId,
-                  quantity: o.quantity,
-                  color: o.color || '',
-                  fileName: o.fileName,
-                }}
-              />
-            )}
           </div>
         </section>
 
@@ -130,18 +127,16 @@ export default async function OrderPage({ params, searchParams }: Props) {
           <h2 className="h3">Preis</h2>
           {p ? (
             <dl className="sum">
-              <div>
-                <dt>
-                  {o.quantity} × {show(p.unitCents)}
-                </dt>
-                <dd>{show(p.partsCents)}</dd>
-              </div>
-              {p.discountPercent > 0 && (
-                <div className="sum__muted">
-                  <dt>Mengenrabatt</dt>
-                  <dd>{p.discountPercent} % enthalten</dd>
+              {items.map((it, n) => (
+                <div key={n}>
+                  <dt>
+                    {it.quantity} × {show(it.unitCents)}
+                    {items.length > 1 ? ` · ${it.fileName}` : ''}
+                    {it.discountPercent ? ` (${it.discountPercent} % Mengenrabatt enthalten)` : ''}
+                  </dt>
+                  <dd>{show(it.partsCents)}</dd>
                 </div>
-              )}
+              ))}
               {p.customerDiscountPercent > 0 && (
                 <div className="sum__muted">
                   <dt>Ihr Kundenrabatt</dt>

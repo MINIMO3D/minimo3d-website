@@ -3,7 +3,10 @@ import Link from 'next/link'
 
 import { PageHead } from '@/components/Blocks'
 import { Calculator } from '@/components/calculator/Calculator'
+import type { InitialPart } from '@/components/calculator/Calculator'
 import { getCalcSetup } from '@/lib/calc-server'
+import { orderItems } from '@/lib/order-items'
+import { getOrder } from '@/lib/portal'
 import { contactFromCustomer } from '@/lib/contact'
 import { discountOf, getCustomer, hasBilling, isB2B } from '@/lib/customer'
 import { stripeEnabled, stripeTestMode } from '@/lib/stripe'
@@ -15,11 +18,24 @@ export const metadata: Metadata = {
 }
 
 type Props = {
-  searchParams: Promise<{ material?: string; abgebrochen?: string; datei?: string; m?: string; schicht?: string; fuellung?: string; menge?: string; farbe?: string }>
+  searchParams: Promise<{ material?: string; abgebrochen?: string; datei?: string; nach?: string; m?: string; schicht?: string; fuellung?: string; menge?: string; farbe?: string }>
 }
 
 export default async function CalculatorPage({ searchParams }: Props) {
   const [params, setup, customer] = await Promise.all([searchParams, getCalcSetup(), getCustomer()])
+
+  // Gespeicherte Datei öffnen oder eine frühere Bestellung mit allen Bauteilen erneut laden
+  let initialParts: InitialPart[] = []
+  if (params.nach && customer) {
+    const order = await getOrder(customer, params.nach)
+    if (order)
+      initialParts = orderItems(order)
+        .filter((i) => i.token)
+        .map((i) => ({ token: i.token!, materialId: i.materialId, layer: i.layerId, infill: i.infillId, quantity: i.quantity, color: i.color }))
+  } else if (params.datei)
+    initialParts = [
+      { token: params.datei, materialId: params.m, layer: params.schicht, infill: params.fuellung, quantity: params.menge ? Number(params.menge) : undefined, color: params.farbe },
+    ]
 
   return (
     <>
@@ -54,14 +70,7 @@ export default async function CalculatorPage({ searchParams }: Props) {
                 : null
             }
             contactDefaults={customer ? contactFromCustomer(customer) : undefined}
-            initial={{
-              token: params.datei,
-              materialId: params.m,
-              layer: params.schicht,
-              infill: params.fuellung,
-              quantity: params.menge ? Number(params.menge) : undefined,
-              color: params.farbe,
-            }}
+            initialParts={initialParts}
           />
         ) : (
           <div className="calc__empty">

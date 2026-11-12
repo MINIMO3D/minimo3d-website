@@ -4,12 +4,13 @@ import Link from 'next/link'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
-  calculatePrice,
+  calculateOrder,
   clampQuantity,
   euro,
   formatHours,
   INFILLS,
   LAYERS,
+  MAX_PARTS,
   netCents,
   type CalcConfig,
   type DeliveryId,
@@ -44,6 +45,13 @@ type Metrics = {
 
 type Analysis = { token: string; fileName: string; metrics: Metrics; checks: Check[] }
 
+/** Ausführung eines Bauteils */
+type PartConfig = { materialId: string; color: string; layer: LayerId; infill: InfillId; quantity: number }
+/** Ein hochgeladenes Bauteil mit Auswertung, 3D-Ansicht und Ausführung */
+type Part = PartConfig & { analysis: Analysis; positions: Float32Array }
+
+export type InitialPart = { token?: string; materialId?: string; layer?: string; infill?: string; quantity?: number; color?: string }
+
 type Props = {
   materials: Material[]
   config: CalcConfig
@@ -54,8 +62,8 @@ type Props = {
   customer?: { b2b: boolean; discountPercent: number; invoiceAllowed: boolean; invoiceDays: number; hasBilling: boolean } | null
   /** Kontakt und Adressen aus dem Kundenkonto als Vorbelegung für den Bestellschritt */
   contactDefaults?: Contact
-  /** Gespeicherte Datei wieder öffnen (Nachbestellen aus dem Kundenkonto) */
-  initial?: { token?: string; materialId?: string; layer?: string; infill?: string; quantity?: number; color?: string }
+  /** Gespeicherte Dateien wieder öffnen (Nachbestellen aus dem Kundenkonto) */
+  initialParts?: InitialPart[]
 }
 
 const ACCEPT = '.stl,.stp,.step,.obj,.3mf'
@@ -72,23 +80,41 @@ const fits = (size: number[], cfg: CalcConfig) => {
   return a[0] <= b[0] && a[1] <= b[1] && a[2] <= b[2]
 }
 
-export function Calculator({ materials, config, checkoutEnabled, testMode, initialMaterial, customer = null, initial, contactDefaults }: Props) {
+export function Calculator({ materials, config, checkoutEnabled, testMode, initialMaterial, customer = null, initialParts, contactDefaults }: Props) {
   const b2b = Boolean(customer?.b2b)
   const canInvoice = Boolean(b2b && customer?.invoiceAllowed)
-  const [analysis, setAnalysis] = useState<Analysis | null>(null)
-  const [positions, setPositions] = useState<Float32Array | null>(null)
   const [busy, setBusy] = useState<'upload' | 'pdf' | 'checkout' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
 
-  const [materialId, setMaterialId] = useState<string>(() => {
-    const wanted = materials.find((m) => String(m.id) === initial?.materialId) || materials.find((m) => m.slug === initialMaterial)
-    return String((wanted || materials[0])?.id ?? '')
-  })
-  const [color, setColor] = useState(initial?.color || '')
-  const [layer, setLayer] = useState<LayerId>(LAYERS.some((l) => l.id === initial?.layer) ? (initial!.layer as LayerId) : 'standard')
-  const [infill, setInfill] = useState<InfillId>(INFILLS.some((i) => i.id === initial?.infill) ? (initial!.infill as InfillId) : 'standard')
-  const [quantity, setQuantity] = useState(() => clampQuantity(initial?.quantity || 1))
+  // Bauteile der Bestellung. Solange noch nichts hochgeladen ist, gilt die Vorauswahl ("draft").
+  const [parts, setParts] = useState<Part[]>([])
+  const [activeToken, setActiveToken] = useState<string | null>(null)
+  const [draft, setDraft] = useState<PartConfig>(() => ({
+    materialId: String((materials.find((m) => m.slug === initialMaterial) || materials[0])?.id ?? ''),
+    color: '',
+    layer: 'standard',
+    infill: 'standard',
+    quantity: 1,
+  }))
+  const part = parts.find((p) => p.analysis.token === activeToken) || parts[0] || null
+  const current: PartConfig = part || draft
+  const update = useCallback(
+    (patch: Partial<PartConfig>) => {
+      const token = part?.analysis.token
+      if (token) setParts((list) => list.map((p) => (p.analysis.token === token ? { ...p, ...patch } : p)))
+      else setDraft((d) => ({ ...d, ...patch }))
+    },
+    [part?.analysis.token],
+  )
+  const analysis = part?.analysis ?? null
+  const positions = part?.positions ?? null
+  const { materialId, color, layer, infill, quantity } = current
+  const setMaterialId = (v: string) => update({ materialId: v })
+  const setColor = (v: string) => update({ color: v })
+  const setLayer = (v: LayerId) => update({ layer: v })
+  const setInfill = (v: InfillId) => update({ infill: v })
+  const setQuantity = (v: number | ((q: number) => number)) => update({ quantity: clampQuantity(typeof v === 'function' ? v(quantity) : v) })
   const [express, setExpress] = useState(false)
   const [delivery, setDelivery] = useState<DeliveryId>('versand')
   const [note, setNote] = useState('')
@@ -104,6 +130,7 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
 
   const viewer = useRef<ViewerHandle>(null)
   const input = useRef<HTMLInputElement>(null)
+  const addInput = useRef<HTMLInputElement>(null)
 
   const material = materials.find((m) => String(m.id) === materialId) || materials[0]
   const families = useMemo(() => [...new Set(materials.map((m) => m.family))], [materials])
@@ -112,99 +139,145 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
   useEffect(() => {
     if (!material) return
     if (material.colors.length) {
-      if (!material.colors.some((c) => c.name === color)) setColor(material.colors[0].name)
-    } else if (materials.some((m) => m.colors.some((c) => c.name === color))) setColor('')
-  }, [material, color, materials])
+      if (!material.colors.some((c) => c.name === color)) update({ color: material.colors[0].name })
+    } else if (materials.some((m) => m.colors.some((c) => c.name === color))) update({ color: '' })
+  }, [material, color, materials, update])
 
   const colorHex = material?.colors.find((c) => c.name === color)?.hex || DEFAULT_COLOR
 
-  const priceFor = useCallback(
-    (qty: number) =>
-      analysis && material
-        ? calculatePrice(
-            {
-              geometry: {
-                volumeCm3: analysis.metrics.volumeCm3,
-                areaCm2: analysis.metrics.areaCm2,
-                supportCm3: analysis.metrics.supportCm3,
-                heightMm: analysis.metrics.size[2],
-              },
-              material,
-              layer,
-              infill,
-              quantity: qty,
-              express,
-              delivery,
-              customerDiscountPercent: customer?.discountPercent || 0,
-            },
-            config,
-          )
-        : null,
-    [analysis, material, layer, infill, express, delivery, config, customer],
+  const itemOf = useCallback(
+    (p: Part, qty = p.quantity) => ({
+      geometry: {
+        volumeCm3: p.analysis.metrics.volumeCm3,
+        areaCm2: p.analysis.metrics.areaCm2,
+        supportCm3: p.analysis.metrics.supportCm3,
+        heightMm: p.analysis.metrics.size[2],
+      },
+      material: materials.find((m) => String(m.id) === p.materialId) || materials[0],
+      layer: p.layer,
+      infill: p.infill,
+      quantity: qty,
+    }),
+    [materials],
   )
-  const price = priceFor(quantity)
-  const fitsBuild = analysis ? fits(analysis.metrics.size, config) : true
-  const hasFail = analysis?.checks.some((c) => c.status === 'fail') ?? false
+  const options = useMemo(
+    () => ({ express, delivery, customerDiscountPercent: customer?.discountPercent || 0 }),
+    [express, delivery, customer?.discountPercent],
+  )
+  // Preis der ganzen Bestellung: alle Bauteile, eine Auftragspauschale, ein Versand
+  const price = useMemo(
+    () => (parts.length ? calculateOrder(parts.map((p) => itemOf(p)), options, config) : null),
+    [parts, itemOf, options, config],
+  )
+  const activeIndex = part ? parts.indexOf(part) : -1
+  const line = price && activeIndex >= 0 ? price.lines[activeIndex] : null
+  /** Stückpreis des gewählten Bauteils bei anderer Menge */
+  const unitFor = (qty: number) => (part ? calculateOrder([itemOf(part, qty)], options, config).lines[0].unitCents : 0)
+  const tooBig = parts.filter((p) => !fits(p.analysis.metrics.size, config))
+  const fitsBuild = tooBig.length === 0
+  const hasFail = parts.some((p) => p.analysis.checks.some((c) => c.status === 'fail'))
+  const several = parts.length > 1
 
-  const upload = async (file: File | undefined | null) => {
-    if (!file) return
+  /** Auswertung und 3D-Ansicht als Bauteil in die Liste aufnehmen */
+  const addPart = (a: Analysis, buffer: ArrayBuffer, cfg?: Partial<PartConfig>) => {
+    setParts((list) => {
+      if (list.some((p) => p.analysis.token === a.token) || list.length >= MAX_PARTS) return list
+      // neues Bauteil übernimmt die Ausführung des zuletzt gewählten, die Stückzahl beginnt bei 1
+      const base: PartConfig = { ...current, quantity: list.length ? 1 : current.quantity, ...cfg }
+      return [...list, { ...base, analysis: a, positions: new Float32Array(buffer) }]
+    })
+    setActiveToken(a.token)
+  }
+
+  const removePart = (token: string) => {
+    setParts((list) => list.filter((p) => p.analysis.token !== token))
+    setActiveToken((t) => (t === token ? null : t))
+    if (parts.length <= 1) setStep('config')
     setError(null)
-    if (!/\.(stl|stp|step|obj|3mf)$/i.test(file.name)) {
-      setError('Dieses Dateiformat können wir hier nicht lesen. Möglich sind STL, STEP (STP), OBJ und 3MF.')
-      return
-    }
-    if (file.size > MAX_SIZE) {
-      setError('Die Datei ist größer als 50 MB. Bitte senden Sie sie uns als Anfrage.')
-      return
-    }
+  }
+
+  const upload = async (files: FileList | File[] | undefined | null) => {
+    const list = Array.from(files || [])
+    if (!list.length) return
+    setError(null)
+    const free = MAX_PARTS - parts.length
+    const problems: string[] = []
+    if (list.length > free) problems.push(`Je Bestellung sind höchstens ${MAX_PARTS} verschiedene Bauteile möglich.`)
     setBusy('upload')
     try {
-      const body = new FormData()
-      body.append('file', file)
-      const res = await fetch('/rechner/analyse', { method: 'POST', body })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(json.error || 'Die Datei konnte nicht ausgewertet werden.')
-      const meshRes = await fetch(`/rechner/mesh/${json.token}`)
-      if (!meshRes.ok) throw new Error('Die 3D-Ansicht konnte nicht geladen werden.')
-      const buffer = await meshRes.arrayBuffer()
-      setPositions(new Float32Array(buffer))
-      setAnalysis(json as Analysis)
-      setAccepted(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Die Datei konnte nicht ausgewertet werden.')
+      for (const file of list.slice(0, Math.max(0, free))) {
+        if (!/\.(stl|stp|step|obj|3mf)$/i.test(file.name)) {
+          problems.push(`${file.name}: Dieses Dateiformat können wir hier nicht lesen. Möglich sind STL, STEP (STP), OBJ und 3MF.`)
+          continue
+        }
+        if (file.size > MAX_SIZE) {
+          problems.push(`${file.name}: Die Datei ist größer als 50 MB. Bitte senden Sie sie uns als Anfrage.`)
+          continue
+        }
+        try {
+          const body = new FormData()
+          body.append('file', file)
+          const res = await fetch('/rechner/analyse', { method: 'POST', body })
+          const json = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error(json.error || 'Die Datei konnte nicht ausgewertet werden.')
+          const meshRes = await fetch(`/rechner/mesh/${json.token}`)
+          if (!meshRes.ok) throw new Error('Die 3D-Ansicht konnte nicht geladen werden.')
+          addPart(json as Analysis, await meshRes.arrayBuffer())
+          setAccepted(false)
+        } catch (err) {
+          problems.push(`${list.length > 1 ? `${file.name}: ` : ''}${err instanceof Error ? err.message : 'Die Datei konnte nicht ausgewertet werden.'}`)
+        }
+      }
     } finally {
       setBusy(null)
+      if (problems.length) setError(problems.join(' '))
       if (input.current) input.current.value = ''
+      if (addInput.current) addInput.current.value = ''
     }
   }
 
-  // Gespeicherte Datei aus dem Kundenkonto wieder öffnen
+  // Gespeicherte Dateien aus dem Kundenkonto wieder öffnen
+  const initialKey = (initialParts || []).map((p) => p.token).join(',')
   useEffect(() => {
-    const token = initial?.token
-    if (!token || !/^[A-Za-z0-9_-]{10,100}$/.test(token)) return
+    const wanted = (initialParts || []).filter((p) => p.token && /^[A-Za-z0-9_-]{10,100}$/.test(p.token)).slice(0, MAX_PARTS)
+    if (!wanted.length) return
     let stop = false
     ;(async () => {
       setBusy('upload')
-      try {
-        const res = await fetch(`/rechner/berechnung/${token}`)
-        const json = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(json.error || 'Die Datei konnte nicht geladen werden.')
-        const meshRes = await fetch(`/rechner/mesh/${token}`)
-        if (!meshRes.ok) throw new Error('Die 3D-Ansicht konnte nicht geladen werden.')
-        const buffer = await meshRes.arrayBuffer()
-        if (stop) return
-        setPositions(new Float32Array(buffer))
-        setAnalysis(json as Analysis)
-      } catch (err) {
-        if (!stop) setError(err instanceof Error ? err.message : 'Die Datei konnte nicht geladen werden.')
-      } finally {
-        if (!stop) setBusy(null)
+      let missing = 0
+      for (const w of wanted) {
+        try {
+          const res = await fetch(`/rechner/berechnung/${w.token}`)
+          const json = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error()
+          const meshRes = await fetch(`/rechner/mesh/${w.token}`)
+          if (!meshRes.ok) throw new Error()
+          const buffer = await meshRes.arrayBuffer()
+          if (stop) return
+          const cfg: Partial<PartConfig> = { quantity: clampQuantity(w.quantity || 1), color: w.color || '' }
+          if (materials.some((m) => String(m.id) === w.materialId)) cfg.materialId = w.materialId
+          if (LAYERS.some((l) => l.id === w.layer)) cfg.layer = w.layer as LayerId
+          if (INFILLS.some((i) => i.id === w.infill)) cfg.infill = w.infill as InfillId
+          addPart(json as Analysis, buffer, cfg)
+        } catch {
+          missing += 1
+        }
       }
+      if (stop) return
+      if (missing)
+        setError(
+          wanted.length === 1
+            ? 'Diese Datei ist nicht mehr gespeichert. Bitte laden Sie sie erneut hoch.'
+            : `${missing} von ${wanted.length} Dateien sind nicht mehr gespeichert. Bitte laden Sie sie erneut hoch.`,
+        )
+      setActiveToken(wanted[0].token || null)
+      setBusy(null)
     })()
     return () => {
       stop = true
     }
-  }, [initial?.token])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialKey])
 
   const invoice = canInvoice && payment === 'rechnung'
 
@@ -245,7 +318,7 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
 
   const checkout = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!analysis) return
+    if (!parts.length || !fitsBuild) return
     setError(null)
     if (step === 'config') {
       // erster Klick: zum Schritt mit Kontakt und Adresse
@@ -258,7 +331,17 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
       const res = await fetch('/rechner/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...selection(), note, accepted, poNumber, costCentre, payment: canInvoice ? payment : 'stripe', contact }),
+        body: JSON.stringify({
+          items: parts.map((p) => ({ token: p.analysis.token, materialId: p.materialId, color: p.color, layer: p.layer, infill: p.infill, quantity: p.quantity })),
+          express,
+          delivery,
+          note,
+          accepted,
+          poNumber,
+          costCentre,
+          payment: canInvoice ? payment : 'stripe',
+          contact,
+        }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json.url) throw new Error(json.error || 'Die Kasse konnte nicht geöffnet werden.')
@@ -267,13 +350,6 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
       setError(err instanceof Error ? err.message : 'Die Kasse konnte nicht geöffnet werden.')
       setBusy(null)
     }
-  }
-
-  const reset = () => {
-    setStep('config')
-    setAnalysis(null)
-    setPositions(null)
-    setError(null)
   }
 
   if (!materials.length)
@@ -291,19 +367,97 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
   return (
     <div className="calc">
       <div className="calc__main">
+        {/* ---------- Bauteile der Bestellung ---------- */}
+        {parts.length > 0 && price && (
+          <section className="panel" aria-labelledby="calc-parts">
+            <div className="panel__head">
+              <h2 className="h3" id="calc-parts">
+                {several ? `Ihre Bauteile (${parts.length})` : 'Ihr Bauteil'}
+              </h2>
+              {parts.length < MAX_PARTS && (
+                <label className={`btn btn--ghost btn--small${busy === 'upload' ? ' btn--busy' : ''}`}>
+                  <input
+                    ref={addInput}
+                    className="calc__add"
+                    type="file"
+                    accept={ACCEPT}
+                    multiple
+                    disabled={busy === 'upload'}
+                    onChange={(e) => void upload(e.target.files)}
+                  />
+                  {busy === 'upload' ? 'Wird geprüft …' : '+ Weiteres Bauteil'}
+                </label>
+              )}
+            </div>
+            <ul
+              className={`partlist${dragging ? ' partlist--over' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragging(true)
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setDragging(false)
+                void upload(e.dataTransfer.files)
+              }}
+            >
+              {parts.map((p, n) => {
+                const mat = materials.find((x) => String(x.id) === p.materialId)
+                const on = p === part
+                const big = !fits(p.analysis.metrics.size, config)
+                return (
+                  <li key={p.analysis.token} className={`partlist__item${on ? ' partlist__item--on' : ''}`}>
+                    <button
+                      type="button"
+                      className="partlist__pick"
+                      aria-pressed={on}
+                      onClick={() => {
+                        setActiveToken(p.analysis.token)
+                        setStep('config')
+                      }}
+                    >
+                      <span className="partlist__name">
+                        {p.quantity} × {p.analysis.fileName}
+                      </span>
+                      <span className="small muted">
+                        {[mat?.name, p.color, `${LAYERS.find((l) => l.id === p.layer)?.label}`, `Füllung ${INFILLS.find((i) => i.id === p.infill)?.label}`]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </span>
+                      {big && <span className="small partlist__warn">Größer als der Bauraum</span>}
+                    </button>
+                    <span className="partlist__price">{big ? '–' : show(price.lines[n].partsCents)}</span>
+                    {several && (
+                      <button type="button" className="linkbtn" aria-label={`${p.analysis.fileName} entfernen`} onClick={() => removePart(p.analysis.token)}>
+                        Entfernen
+                      </button>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+            <p className="small muted">
+              {several
+                ? 'Wählen Sie ein Bauteil aus, um Material, Ausführung und Stückzahl zu ändern. Auftragspauschale und Versand fallen nur einmal an.'
+                : 'Sie können weitere Bauteile hinzufügen und zusammen bestellen. Auftragspauschale und Versand fallen dann nur einmal an.'}
+            </p>
+          </section>
+        )}
+
         {/* ---------- Datei und 3D-Ansicht ---------- */}
         <section className="panel" aria-labelledby="calc-file">
           <div className="panel__head">
             <h2 className="h3" id="calc-file">
-              {analysis ? analysis.fileName : '1. Datei hochladen'}
+              {analysis ? analysis.fileName : '1. Dateien hochladen'}
             </h2>
             {analysis && (
               <div className="panel__actions">
                 <button className="linkbtn" type="button" onClick={() => viewer.current?.resetView()}>
                   Ansicht zurücksetzen
                 </button>
-                <button className="linkbtn" type="button" onClick={reset}>
-                  Andere Datei
+                <button className="linkbtn" type="button" onClick={() => removePart(analysis.token)}>
+                  {several ? 'Teil entfernen' : 'Andere Datei'}
                 </button>
               </div>
             )}
@@ -320,7 +474,7 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
               onDrop={(e) => {
                 e.preventDefault()
                 setDragging(false)
-                void upload(e.dataTransfer.files?.[0])
+                void upload(e.dataTransfer.files)
               }}
             >
               <input
@@ -328,13 +482,14 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
                 className="dropzone__input"
                 type="file"
                 accept={ACCEPT}
+                multiple
                 disabled={busy === 'upload'}
-                onChange={(e) => void upload(e.target.files?.[0])}
+                onChange={(e) => void upload(e.target.files)}
               />
               <span className="dropzone__title">
-                {busy === 'upload' ? 'Datei wird geprüft …' : 'Datei hierher ziehen oder auswählen'}
+                {busy === 'upload' ? 'Dateien werden geprüft …' : 'Dateien hierher ziehen oder auswählen'}
               </span>
-              <span className="dropzone__hint">STL · STP · STEP · OBJ · 3MF, bis 50 MB</span>
+              <span className="dropzone__hint">STL · STP · STEP · OBJ · 3MF, bis 50 MB je Datei, mehrere Bauteile möglich</span>
               <span className="dropzone__note">
                 Die Datei wird zur Berechnung auf unseren Server in Deutschland geladen und nach 7 Tagen gelöscht, wenn
                 Sie nicht bestellen.
@@ -345,7 +500,7 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
           {analysis && positions && m && (
             <>
               <div className="viewer">
-                <Viewer ref={viewer} positions={positions} color={colorHex} build={{ x: config.buildX, y: config.buildY }} />
+                <Viewer key={analysis.token} ref={viewer} positions={positions} color={colorHex} build={{ x: config.buildX, y: config.buildY }} />
               </div>
               <dl className="facts">
                 <div>
@@ -522,7 +677,7 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
                     <p className="small muted">Wir versenden mit DHL innerhalb Deutschlands.</p>
                   </>
                 ) : (
-                  <p className="small muted">Sie holen das Teil in Neuhausen auf den Fildern ab. Wir melden uns, sobald es bereitliegt.</p>
+                  <p className="small muted">Sie holen Ihre Bestellung in Neuhausen auf den Fildern ab. Wir melden uns, sobald es bereitliegt.</p>
                 )}
                 {customer === null && (
                   <p className="small muted">
@@ -535,7 +690,7 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
         )}
         <section className="panel" aria-labelledby="calc-config" hidden={step === 'address'}>
           <h2 className="h3" id="calc-config">
-            {analysis ? 'Ausführung wählen' : '2. Ausführung wählen'}
+            {analysis ? (several ? `Ausführung: ${analysis.fileName}` : 'Ausführung wählen') : '2. Ausführung wählen'}
           </h2>
 
           <div className="field">
@@ -680,8 +835,9 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
           {analysis && price && !fitsBuild && (
             <>
               <p>
-                Das Teil ist größer als unser Bauraum von {config.buildX} × {config.buildY} × {config.buildZ} mm. Wir
-                fertigen es geteilt und gefügt und nennen Ihnen den Preis im Angebot.
+                {several ? `„${tooBig.map((p) => p.analysis.fileName).join('“, „')}“ ist` : 'Das Teil ist'} größer als unser Bauraum von {config.buildX} ×{' '}
+                {config.buildY} × {config.buildZ} mm. Wir fertigen es geteilt und gefügt und nennen Ihnen den Preis im Angebot.
+                {several ? ' Entfernen Sie das Teil aus der Liste, um die übrigen online zu bestellen.' : ''}
               </p>
               <Link className="btn btn--primary" href="/kontakt#anfrage">
                 Bauteil anfragen
@@ -699,13 +855,19 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
                 </span>
               </p>
               <dl className="sum">
-                <div>
-                  <dt>
-                    {quantity} × {show(price.unitCents)}
-                    {price.discountPercent ? ` (${num(price.discountPercent, 0)} % Mengenrabatt enthalten)` : ''}
-                  </dt>
-                  <dd>{show(price.partsCents)}</dd>
-                </div>
+                {parts.map((p, n) => {
+                  const l = price.lines[n]
+                  return (
+                    <div key={p.analysis.token}>
+                      <dt>
+                        {p.quantity} × {show(l.unitCents)}
+                        {several ? ` · ${p.analysis.fileName}` : ''}
+                        {l.discountPercent ? ` (${num(l.discountPercent, 0)} % Mengenrabatt enthalten)` : ''}
+                      </dt>
+                      <dd>{show(l.partsCents)}</dd>
+                    </div>
+                  )
+                })}
                 {price.customerDiscountPercent > 0 && (
                   <div className="sum__muted">
                     <dt>Ihr Kundenrabatt</dt>
@@ -749,26 +911,28 @@ export function Calculator({ materials, config, checkoutEnabled, testMode, initi
                   <dt>Lieferzeit</dt>
                   <dd>{price.leadTime}</dd>
                 </div>
-                <div>
-                  <dt>Gewicht je Stück</dt>
-                  <dd>ca. {num(price.gramsPerPart, 0)} g</dd>
-                </div>
-                <div>
-                  <dt>Druckzeit je Stück</dt>
-                  <dd>ca. {formatHours(price.hoursPerPart)}</dd>
-                </div>
+                {line && (
+                  <>
+                    <div>
+                      <dt>Gewicht je Stück</dt>
+                      <dd>ca. {num(line.gramsPerPart, 0)} g</dd>
+                    </div>
+                    <div>
+                      <dt>Druckzeit je Stück</dt>
+                      <dd>ca. {formatHours(line.hoursPerPart)}</dd>
+                    </div>
+                  </>
+                )}
               </dl>
 
+              {several && analysis && <p className="small muted">Gewicht, Druckzeit und Staffelpreise für: {analysis.fileName}</p>}
               <div className="ladder" aria-label="Stückpreis nach Menge">
-                {QUANTITY_PRESETS.map((q) => {
-                  const p = priceFor(q)
-                  return p ? (
-                    <button key={q} type="button" className={`ladder__cell${quantity === q ? ' ladder__cell--on' : ''}`} onClick={() => setQuantity(q)}>
-                      <span>{q} Stück</span>
-                      <strong>{show(p.unitCents)}</strong>
-                    </button>
-                  ) : null
-                })}
+                {QUANTITY_PRESETS.map((q) => (
+                  <button key={q} type="button" className={`ladder__cell${quantity === q ? ' ladder__cell--on' : ''}`} onClick={() => setQuantity(q)}>
+                    <span>{q} Stück</span>
+                    <strong>{show(unitFor(q))}</strong>
+                  </button>
+                ))}
               </div>
 
               {hasFail && (
